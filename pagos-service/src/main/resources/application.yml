@@ -1,0 +1,45 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: pagos-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/pagos_db}
+    username: ${DB_USER:pagos_user}
+    password: ${DB_PASSWORD:pagos_pass}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    port: 5672
+    username: ${RABBIT_USER:guest}
+    password: ${RABBIT_PASSWORD:guest}
+    publisher-confirm-type: simple
+
+mercadopago:
+  # real = llama a la API de Mercado Pago | mock = simula (para desarrollo sin credenciales)
+  modo: ${MP_MODO:mock}
+  api-url: https://api.mercadopago.com
+  access-token: ${MP_ACCESS_TOKEN:}          # TEST-xxxx (sandbox) o APP_USR-xxxx (produccion)
+  webhook-secret: ${MP_WEBHOOK_SECRET:}      # "Clave secreta" de Tus integraciones > Webhooks
+  # URL publica donde Mercado Pago enviara los webhooks (ngrok en desarrollo)
+  url-publica: ${PUBLIC_URL:http://localhost:8080}
+  frontend-url: ${FRONTEND_URL:http://localhost:4200}
+  descriptor: ACADEMIACURSOS
+
+seguridad:
+  jwt:
+    secreto: ${JWT_SECRET}
+    emisor: plataforma-cursos
+  clave-interna: ${INTERNAL_API_KEY}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
