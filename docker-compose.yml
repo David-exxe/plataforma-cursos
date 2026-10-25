@@ -1,0 +1,153 @@
+# Levantar todo:   docker compose up -d --build
+# Gateway (unica puerta para Angular): http://localhost:8080
+# RabbitMQ UI: http://localhost:15672   |   Mailpit (correos de prueba): http://localhost:8025
+name: plataforma-cursos
+
+x-servicio: &servicio
+  build:
+    context: .
+  restart: unless-stopped
+  networks: [interna]
+  environment: &env-comun
+    JWT_SECRET: ${JWT_SECRET}
+    INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+    RABBIT_HOST: rabbitmq
+    RABBIT_USER: ${RABBIT_USER}
+    RABBIT_PASSWORD: ${RABBIT_PASSWORD}
+    FRONTEND_URL: ${FRONTEND_URL}
+    TZ: America/Lima
+  depends_on:
+    postgres: { condition: service_healthy }
+    rabbitmq: { condition: service_healthy }
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MATRICULA_DB_PASSWORD: ${MATRICULA_DB_PASSWORD}
+      PAGOS_DB_PASSWORD: ${PAGOS_DB_PASSWORD}
+      NOTIFICACIONES_DB_PASSWORD: ${NOTIFICACIONES_DB_PASSWORD}
+      COMPROBANTES_DB_PASSWORD: ${COMPROBANTES_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/db/00-crear-bases.sh:/docker-entrypoint-initdb.d/00-crear-bases.sh:ro
+    ports: ["5432:5432"]          # solo para revisar con DBeaver/pgAdmin en desarrollo
+    networks: [interna]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}
+    ports: ["15672:15672"]
+    networks: [interna]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 10
+
+  mailpit:                         # servidor SMTP falso: atrapa todos los correos
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports: ["8025:8025"]
+    networks: [interna]
+
+  api-gateway:
+    build: { context: ., args: { MODULO: api-gateway } }
+    restart: unless-stopped
+    networks: [interna]
+    ports: ["8080:8080"]           # el UNICO puerto de la app expuesto al exterior
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGINS: ${FRONTEND_URL}
+      MATRICULA_URL: http://matricula-service:8081
+      PAGOS_URL: http://pagos-service:8082
+      NOTIFICACIONES_URL: http://notificaciones-service:8083
+      COMPROBANTES_URL: http://comprobantes-service:8084
+      IP_LISTA_NEGRA: ${IP_LISTA_NEGRA:-}
+      MAX_RPM: ${MAX_RPM:-120}
+    depends_on: [matricula-service, pagos-service, notificaciones-service, comprobantes-service]
+
+  matricula-service:
+    <<: *servicio
+    build: { context: ., args: { MODULO: matricula-service } }
+    environment:
+      <<: *env-comun
+      DB_URL: jdbc:postgresql://postgres:5432/matricula_db
+      DB_USER: matricula_user
+      DB_PASSWORD: ${MATRICULA_DB_PASSWORD}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_TELEFONO: ${ADMIN_TELEFONO}
+      PAGOS_URL: http://pagos-service:8082
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USER: ${MAIL_USER}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_AUTH: ${MAIL_AUTH}
+      MAIL_TLS: ${MAIL_TLS}
+      MAIL_FROM: ${MAIL_FROM}
+
+  pagos-service:
+    <<: *servicio
+    build: { context: ., args: { MODULO: pagos-service } }
+    environment:
+      <<: *env-comun
+      DB_URL: jdbc:postgresql://postgres:5432/pagos_db
+      DB_USER: pagos_user
+      DB_PASSWORD: ${PAGOS_DB_PASSWORD}
+      MP_MODO: ${MP_MODO}
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET}
+      PUBLIC_URL: ${PUBLIC_URL}
+
+  notificaciones-service:
+    <<: *servicio
+    build: { context: ., args: { MODULO: notificaciones-service } }
+    environment:
+      <<: *env-comun
+      DB_URL: jdbc:postgresql://postgres:5432/notificaciones_db
+      DB_USER: notificaciones_user
+      DB_PASSWORD: ${NOTIFICACIONES_DB_PASSWORD}
+      WA_MODO: ${WA_MODO}
+      WA_PHONE_NUMBER_ID: ${WA_PHONE_NUMBER_ID}
+      WA_ACCESS_TOKEN: ${WA_ACCESS_TOKEN}
+      WA_VERIFY_TOKEN: ${WA_VERIFY_TOKEN}
+      WA_APP_SECRET: ${WA_APP_SECRET}
+      WA_USAR_PLANTILLAS: ${WA_USAR_PLANTILLAS}
+      ADMIN_TELEFONO: ${ADMIN_TELEFONO}
+      MATRICULA_URL: http://matricula-service:8081
+      COMPROBANTES_URL: http://comprobantes-service:8084
+
+  comprobantes-service:
+    <<: *servicio
+    build: { context: ., args: { MODULO: comprobantes-service } }
+    environment:
+      <<: *env-comun
+      DB_URL: jdbc:postgresql://postgres:5432/comprobantes_db
+      DB_USER: comprobantes_user
+      DB_PASSWORD: ${COMPROBANTES_DB_PASSWORD}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USER: ${MAIL_USER}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_AUTH: ${MAIL_AUTH}
+      MAIL_TLS: ${MAIL_TLS}
+      MAIL_FROM: ${MAIL_FROM}
+      EMPRESA_NOMBRE: ${EMPRESA_NOMBRE}
+      EMPRESA_RUC: ${EMPRESA_RUC}
+
+networks:
+  interna:
+
+volumes:
+  pgdata:
