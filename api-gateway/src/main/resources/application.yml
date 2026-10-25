@@ -1,0 +1,41 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+# URLs internas de cada microservicio (en docker-compose se sobreescriben por variables de entorno)
+servicios:
+  matricula: ${MATRICULA_URL:http://localhost:8081}
+  pagos: ${PAGOS_URL:http://localhost:8082}
+  notificaciones: ${NOTIFICACIONES_URL:http://localhost:8083}
+  comprobantes: ${COMPROBANTES_URL:http://localhost:8084}
+
+seguridad:
+  jwt:
+    secreto: ${JWT_SECRET}           # Base64, minimo 32 bytes (ver scripts/generar-secretos.sh)
+    emisor: plataforma-cursos
+  cors:
+    origenes-permitidos: ${CORS_ORIGINS:http://localhost:4200}
+  ip:
+    # IPs bloqueadas de forma permanente (separadas por coma). Acepta prefijos: "203.0.113."
+    lista-negra: ${IP_LISTA_NEGRA:}
+    # IPs que nunca se bloquean (ej. tu IP de oficina, el host de docker)
+    lista-blanca: ${IP_LISTA_BLANCA:127.0.0.1,0:0:0:0:0:0:0:1}
+    # Solo activar si hay un balanceador/proxy delante que ponga X-Forwarded-For
+    confiar-x-forwarded-for: ${CONFIAR_XFF:false}
+    max-peticiones-por-minuto: ${MAX_RPM:120}
+    max-logins-fallidos: 5
+    ventana-logins-fallidos-minutos: 15
+    minutos-bloqueo: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.academia: INFO
