@@ -1,0 +1,60 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: notificaciones-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/notificaciones_db}
+    username: ${DB_USER:notificaciones_user}
+    password: ${DB_PASSWORD:notificaciones_pass}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    port: 5672
+    username: ${RABBIT_USER:guest}
+    password: ${RABBIT_PASSWORD:guest}
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 4
+          initial-interval: 2s
+          multiplier: 3
+
+whatsapp:
+  # real = WhatsApp Cloud API de Meta | mock = solo escribe el mensaje en el log
+  modo: ${WA_MODO:mock}
+  api-url: ${WA_API_URL:https://graph.facebook.com/v21.0}
+  phone-number-id: ${WA_PHONE_NUMBER_ID:}
+  access-token: ${WA_ACCESS_TOKEN:}
+  verify-token: ${WA_VERIFY_TOKEN:cambia-este-token}   # el mismo que pones en Meta al registrar el webhook
+  app-secret: ${WA_APP_SECRET:}                        # para validar X-Hub-Signature-256
+  # Fuera de la ventana de 24 h, Meta solo permite plantillas aprobadas
+  usar-plantillas: ${WA_USAR_PLANTILLAS:false}
+  idioma-plantillas: es
+  telefono-admin: ${ADMIN_TELEFONO:51999999999}
+  max-intentos: 5
+
+app:
+  matricula-url: ${MATRICULA_URL:http://localhost:8081}
+  comprobantes-url: ${COMPROBANTES_URL:http://localhost:8084}
+  frontend-url: ${FRONTEND_URL:http://localhost:4200}
+
+seguridad:
+  jwt:
+    secreto: ${JWT_SECRET}
+    emisor: plataforma-cursos
+  clave-interna: ${INTERNAL_API_KEY}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
