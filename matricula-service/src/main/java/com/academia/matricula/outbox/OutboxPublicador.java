@@ -32,7 +32,7 @@ public class OutboxPublicador {
         this.rabbit = rabbit;
     }
 
-    @Scheduled(fixedDelay = 2000, initialDelay = 5000)
+    @Scheduled(fixedDelayString = "${app.outbox-intervalo-ms:2000}", initialDelay = 5000)
     @Transactional
     public void publicar() {
         for (OutboxEvento e : repo.bloquearPendientes()) {

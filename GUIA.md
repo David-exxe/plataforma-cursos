@@ -1,6 +1,8 @@
-# Plataforma de venta de cursos — Backend con microservicios
+# Plataforma de venta de cursos — Microservicios + Frontend Angular
 
-Spring Boot 3.5 · Java 21 · PostgreSQL 16 · RabbitMQ · Spring Cloud Gateway · Mercado Pago · WhatsApp Cloud API
+Angular 20 · Spring Boot 3.5 · Java 21 · PostgreSQL (local o NeonDB) · RabbitMQ (local o CloudAMQP) · Spring Cloud Gateway + Resilience4j · Mercado Pago · WhatsApp Cloud API · Render
+
+**Índice rápido:** [Frontend (vistas)](#12-frontend-angular) · [Correr en tu PC](#6-cómo-ejecutarlo) · [NeonDB](#13-base-de-datos-en-neondb) · [Despliegue independiente en Render](#14-despliegue-independiente-en-render) · [Probar la tolerancia a fallos](#15-probar-que-un-servicio-caído-no-tumba-a-los-demás)
 
 > **Sobre "n2f":** lo interpreté como **2FA (autenticación de dos factores)**. Está implementado con códigos TOTP de 6 dígitos (Google Authenticator / Microsoft Authenticator). Si tu profesor se refería a otra cosa, avísame.
 
@@ -49,25 +51,28 @@ La empresa trabaja a mano: registra inscripciones, revisa comprobantes uno por u
 ## 2. Arquitectura
 
 ```
-                         ┌──────────────────────┐
-     Angular :4200 ────► │  API GATEWAY :8080   │  bloqueo IPs → JWT → CORS → rutas
-     Mercado Pago ─────► │  (único puerto       │
-     WhatsApp (Meta) ──► │   expuesto)          │
-                         └──┬──────┬──────┬─────┘
-            ┌───────────────┘      │      └──────────────┬───────────────────┐
-            ▼                      ▼                     ▼                   ▼
-  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────────┐  ┌──────────────────┐
-  │ matricula :8081  │─►│ pagos :8082      │  │ notificaciones:8083│  │ comprobantes:8084│
-  │ auth+2FA, cursos │  │ Mercado Pago     │  │ WhatsApp + bot     │  │ PDF + correo     │
-  │ inscripciones    │  │ webhook, concil. │  │                    │  │                  │
-  └───────┬──────────┘  └───────┬──────────┘  └─────────▲──────────┘  └────────▲─────────┘
-          │ REST síncrono ──────┘ (crear link de pago)   │                      │
-          │                                              │                      │
-          └──────────────► RabbitMQ  exchange topic "cursos.eventos" ───────────┘
-                           (eventos asíncronos + Dead Letter Queues)
-   matricula_db        pagos_db              notificaciones_db         comprobantes_db
-   (una base de datos y un usuario de Postgres por servicio)
+        Navegador ──► Frontend Angular (static site / Nginx :4200)
+                              │  HTTPS + JWT  (solo conoce al gateway)
+  Mercado Pago ──┐            ▼
+  WhatsApp Meta ─┼──► ┌───────────────────────────────────────────────┐
+                 └──► │ API GATEWAY :8080                             │
+                      │ bloqueo IPs → JWT → CORS → rutas              │
+                      │ circuit breaker POR servicio + fallback 503   │
+                      │ /api/estado (salud de todos)                  │
+                      └──┬──────────┬──────────────┬──────────────┬───┘
+                         ▼          ▼              ▼              ▼
+              ┌──────────────┐ ┌──────────┐ ┌────────────────┐ ┌──────────────┐
+              │ matricula    │►│ pagos    │ │ notificaciones │ │ comprobantes │
+              │ auth+2FA     │ │ Mercado  │ │ WhatsApp + bot │ │ PDF + correo │
+              │ cursos, insc.│ │ Pago     │ │                │ │              │
+              └──────┬───────┘ └────┬─────┘ └───────▲────────┘ └──────▲───────┘
+                     └──────────────┴──► RabbitMQ "cursos.eventos" ◄──┘
+                                         (colas durables + DLQ)
+        matricula_db        pagos_db       notificaciones_db      comprobantes_db
+        (PostgreSQL local o NeonDB: una base de datos por servicio)
 ```
+
+Cada caja es un **proceso independiente** (su propio contenedor, puerto, base de datos y despliegue). En Render cada una es un **Web Service** distinto con su propia URL: si uno se cae, los demás siguen funcionando (sección 15).
 
 **¿Por qué síncrono en un solo punto?** Al inscribirse, el estudiante necesita el link de pago en la misma respuesta, así que `matricula → pagos` es REST (con timeouts cortos). Todo lo demás (avisar, emitir comprobante, marcar pagada) es **asíncrono por eventos**: si un servicio está caído, el mensaje espera en su cola.
 
@@ -151,12 +156,15 @@ plataforma-cursos/
 ├── pagos-service/
 ├── notificaciones-service/
 ├── comprobantes-service/
-├── scripts/                 (BD, secretos, prueba de flujo, webhook firmado)
-├── Dockerfile               (uno para todos, con ARG MODULO)
-├── docker-compose.yml
+├── frontend/                (Angular 20: vistas de estudiante y panel admin)
+├── scripts/                 (BD local y Neon, secretos, prueba de flujo, webhook firmado)
+├── docker-compose.yml       (todo local: infraestructura + 5 servicios + frontend)
+├── render.yaml              (despliegue independiente de cada servicio en Render)
 └── .env.example
 ```
-Dependencias por servicio: `web`, `data-jpa`, `validation`, `oauth2-resource-server` (JWT), `amqp`, `actuator`, `flyway`, `postgresql`, `lombok`; + `mail` (matrícula, comprobantes) + `openpdf` (comprobantes). Gateway: `spring-cloud-starter-gateway-server-webflux` + `oauth2-resource-server`.
+Cada microservicio tiene **su propio `Dockerfile`** (`<servicio>/Dockerfile`), así se construye y despliega por separado.
+Dependencias por servicio: `web`, `data-jpa`, `validation`, `oauth2-resource-server` (JWT), `amqp`, `actuator`, `flyway`, `postgresql`, `lombok`; + `mail` (matrícula, comprobantes) + `openpdf` (comprobantes). Gateway: `spring-cloud-starter-gateway-server-webflux` + `oauth2-resource-server` + `spring-cloud-starter-circuitbreaker-reactor-resilience4j`.
+Correo: clase `CorreoSender` con dos proveedores, `smtp` (local) o `brevo` (API HTTP, necesario en Render free porque bloquea los puertos SMTP).
 
 ### Paso 2 — PostgreSQL: una base por servicio
 - `scripts/db/00-crear-bases.sh` (Docker) o `scripts/db/crear-bases-local.sql` (Postgres instalado): crea 4 usuarios y 4 bases; cada usuario solo puede conectarse a la suya.
@@ -215,6 +223,10 @@ Tablas clave: `usuarios`, `cursos`, `inscripciones` (índice único parcial: una
 2. **JWT**: valida firma, emisor, expiración y audiencia `api`. Rutas públicas: registro, login, 2FA-verificar, `GET /api/cursos/**`, `/webhooks/**`. `/api/admin/**` exige rol ADMIN.
 3. **CORS**: solo `FRONTEND_URL` (http://localhost:4200), métodos y cabeceras explícitos, sin cookies. Solo el gateway pone cabeceras CORS (si los servicios también lo hicieran, el navegador vería cabeceras duplicadas y fallaría).
 4. **Rutas**: elimina cualquier `X-Internal-Key` que venga de afuera; `/internal/**` nunca se publica.
+5. **Circuit breaker por servicio** (`ResilienciaConfig`, Resilience4j): cada ruta tiene su propio circuito. Si de las últimas 10 llamadas a un servicio al menos la mitad fallan, el circuito se **abre** 20 s y el gateway responde al instante con `/fallback/{servicio}` (HTTP 503 y un mensaje claro) en vez de dejar al usuario esperando. Los demás circuitos siguen cerrados.
+6. **Timeouts por ruta**: 90 s en la nube (un servicio dormido de Render tarda ~1 min en despertar), 20 s en Docker.
+7. **`GET /api/estado`**: consulta en paralelo el `/actuator/health` de los 4 servicios (con timeout propio) y devuelve estado, latencia y componentes (BD, RabbitMQ). Sirve para revisar de un vistazo qué servicio está caído: ábrelo en el navegador.
+8. **IP real detrás de un proxy**: `IP_CABECERAS` (en Render `CF-Connecting-IP,True-Client-IP,X-Forwarded-For`). `GET /api/mi-ip` muestra qué IP ve el gateway.
 
 ### Paso 9 — Resumen de seguridad
 | Control | Dónde |
@@ -235,37 +247,40 @@ Tablas clave: `usuarios`, `cursos`, `inscripciones` (índice único parcial: una
 
 ## 6. Cómo ejecutarlo
 
-### Opción A — Docker (recomendada)
+### Opción A — Todo con Docker (recomendada)
+Requisitos: Docker Desktop abierto y Git Bash (Windows). En la carpeta del proyecto:
 ```bash
-cd plataforma-cursos
-./scripts/generar-secretos.sh          # crea .env con JWT_SECRET, INTERNAL_API_KEY, ENCRYPTION_KEY aleatorios
-docker compose up -d --build           # primera vez: ~5 min descargando dependencias
-docker compose ps                      # todos "running"
-./scripts/probar-flujo.sh              # prueba de concepto completa (necesita jq)
+./scripts/generar-secretos.sh          # crea .env con secretos aleatorios
+docker compose up -d --build           # 1.ª vez: 5–15 min (descarga y compila todo)
+docker compose ps                      # 9 contenedores en "running"
 ```
-- Correos: http://localhost:8025 (Mailpit)
-- RabbitMQ: http://localhost:15672 (usuario/clave del `.env`)
-- WhatsApp en modo mock: `docker compose logs -f notificaciones-service`
+| Qué | Dónde |
+|---|---|
+| **Frontend (la plataforma)** | http://localhost:4200 |
+| API Gateway | http://localhost:8080 |
+| Correos enviados (Mailpit) | http://localhost:8025 |
+| RabbitMQ | http://localhost:15672 (usuario/clave de `.env`) |
+| Admin | correo `ADMIN_EMAIL` y clave `ADMIN_PASSWORD` del `.env` |
 
-> En Docker todas las peticiones desde tu PC llegan al gateway con la misma IP (la del puente de Docker). El paso 10 del script bloquea esa IP 30 min: es la demostración del bloqueo. Para seguir probando: `docker compose restart api-gateway`.
+Prueba por consola (opcional, necesita `jq`): `./scripts/probar-flujo.sh`. Su último paso bloquea tu IP a propósito; para desbloquear: `docker compose restart api-gateway`.
 
-### Opción B — Sin Docker (IntelliJ)
-1. Instala PostgreSQL 16 y RabbitMQ; ejecuta `psql -U postgres -f scripts/db/crear-bases-local.sql`.
-2. Variables de entorno en cada Run Configuration: `JWT_SECRET`, `INTERNAL_API_KEY` (iguales en todos) y en matrícula `ENCRYPTION_KEY`, `ADMIN_PASSWORD`. Generarlas: `openssl rand -base64 64`, `openssl rand -hex 32`, `openssl rand -base64 32`.
-3. Para correos instala Mailpit o usa Gmail (sección 9).
-4. `mvn clean package` en la raíz y arranca los 5 `*Application` (el gateway al final).
-
-### Probar 2FA a mano
+### Opción B — Frontend con `ng serve` y backend en Docker
+Útil para modificar las vistas y verlas al instante:
 ```bash
-# 1) con el token del usuario
-curl -X POST localhost:8080/api/auth/2fa/configurar -H "Authorization: Bearer $TOKEN"
-# 2) escanea otpauthUri (pégalo en un generador de QR) con Google Authenticator, o:
-oathtool --totp -b <SECRETO>
-# 3) activar
-curl -X POST localhost:8080/api/auth/2fa/activar -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"codigo":"123456"}'
-# 4) desde ahora el login devuelve requiere2fa=true + tokenTemporal
-curl -X POST localhost:8080/api/auth/2fa/verificar -H 'Content-Type: application/json' -d '{"tokenTemporal":"...","codigo":"654321"}'
+docker compose up -d --build postgres rabbitmq mailpit api-gateway matricula-service pagos-service notificaciones-service comprobantes-service
+cd frontend
+npm install
+npm start                              # http://localhost:4200 (recarga sola al guardar)
 ```
+
+### Opción C — Sin Docker (VS Code / IntelliJ)
+1. Instala PostgreSQL 16 (o usa NeonDB, sección 13) y RabbitMQ; para Postgres local: `psql -U postgres -f scripts/db/crear-bases-local.sql`.
+2. Variables de entorno en cada servicio: `JWT_SECRET` e `INTERNAL_API_KEY` (iguales en todos), `RABBIT_URL`, y en matrícula `ENCRYPTION_KEY` y `ADMIN_PASSWORD`. Generarlas: `openssl rand -base64 64`, `openssl rand -hex 32`, `openssl rand -base64 32`.
+3. `mvn clean package` en la raíz y arranca los 5 `*Application` (el gateway al final).
+4. Frontend: `cd frontend && npm install && npm start`.
+
+### Probar 2FA
+En la web: **Mi cuenta** (`/cuenta`) → activar 2FA → escanea el QR con Google/Microsoft Authenticator → escribe el código. Desde ahí el login pide el código de 6 dígitos.
 
 ---
 
@@ -296,13 +311,19 @@ curl -X POST localhost:8080/api/auth/2fa/verificar -H 'Content-Type: application
 | `comprobante_enviado` | nombre, número, email |
 | `alerta_admin` | número, email |
 
-## 9. Correo real (Gmail)
-Activa verificación en 2 pasos en la cuenta → crea una **contraseña de aplicación** → en `.env`:
+## 9. Correo real
+
+**En tu PC (SMTP con Gmail).** Activa verificación en 2 pasos en la cuenta → crea una **contraseña de aplicación** → en `.env`:
 `MAIL_HOST=smtp.gmail.com`, `MAIL_PORT=587`, `MAIL_USER=tucorreo@gmail.com`, `MAIL_PASSWORD=<contraseña de aplicación>`, `MAIL_AUTH=true`, `MAIL_TLS=true`, `MAIL_FROM=Academia <tucorreo@gmail.com>`.
+
+**En Render (Brevo).** El plan gratuito de Render bloquea los puertos SMTP (25, 465 y 587), así que Gmail por SMTP no funciona ahí. Se usa la API HTTP de Brevo (gratis, 300 correos/día):
+1. Crea una cuenta en https://www.brevo.com → **Senders, Domains & Dedicated IPs → Senders** → agrega y verifica tu correo remitente.
+2. **SMTP & API → API Keys** → crea una clave.
+3. Variables: `CORREO_PROVEEDOR=brevo`, `BREVO_API_KEY=<clave>`, `MAIL_FROM=Academia <correo-verificado@gmail.com>`.
 
 ---
 
-## 10. Endpoints para el frontend Angular (todo por `http://localhost:8080`)
+## 10. Endpoints del API Gateway (los usa el frontend)
 
 | Método | Ruta | Auth | Descripción |
 |---|---|---|---|
@@ -324,15 +345,8 @@ Activa verificación en 2 pasos en la cuenta → crea una **contraseña de aplic
 | GET · POST | /api/admin/notificaciones · /{id}/reintentar | ADMIN | WhatsApp enviados/fallidos |
 | POST | /api/admin/recordatorios/ejecutar | ADMIN | dispara recordatorios (demo) |
 | GET · POST · DELETE | /gateway/admin/ips | ADMIN | IPs bloqueadas |
-
-Interceptor mínimo en Angular:
-```ts
-export const authInterceptor: HttpInterceptorFn = (req, next) => {
-  const token = localStorage.getItem('token');
-  return next(token ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : req);
-};
-```
-Las `back_urls` de Mercado Pago apuntan a `/pago/resultado?estado=...&inscripcion=ID`; en modo mock el link lleva a `/pago-simulado?inscripcion=ID` (una página con botones "Aprobar / Rechazar" que llamen a `/api/pagos/simulacion`).
+| POST · GET | /api/bot/mensaje · /api/bot/historial | JWT | chat web con el mismo bot de WhatsApp |
+| GET | /api/estado · /api/mi-ip | — | salud de los 4 servicios / IP vista por el gateway |
 
 ---
 
@@ -341,3 +355,111 @@ Las `back_urls` de Mercado Pago apuntan a `/pago/resultado?estado=...&inscripcio
 - Refresh tokens y revocación de JWT (lista negra de `jti`).
 - El PDF es un comprobante de control interno; la boleta/factura electrónica ante SUNAT requiere integrar un OSE/PSE.
 - Pruebas de integración con Testcontainers y observabilidad (trazas distribuidas, métricas en Prometheus).
+- En Render free los servicios se duermen: para producción real, plan pagado (siempre encendidos) o una sola instancia más grande.
+
+---
+
+## 12. Frontend Angular
+
+Carpeta `frontend/` (proyecto `academia-web`, hecho por el equipo). Angular 20 con componentes standalone y lazy loading. Solo conoce **una URL**, la del API Gateway:
+- **Desarrollo:** `src/environments/environment.ts` → `http://localhost:8080`.
+- **Producción:** `src/environments/environment.prod.ts` trae `https://api.tu-dominio.com`. Al compilar, Docker y Render lo reemplazan por la variable `API_URL` (la URL real del gateway). No hace falta editarlo a mano.
+
+### Vistas
+| Ruta | Vista | Microservicio(s) que consume |
+|---|---|---|
+| `/` y `/cursos` | Catálogo de cursos | matricula |
+| `/cursos/:id` | Detalle e inscripción | matricula → pagos |
+| `/ingresar` · `/registro` | Ingreso (con código 2FA si está activo) y registro | matricula |
+| `/mis-inscripciones` | Mis cursos: pagar, regenerar link, cancelar | matricula |
+| `/pago-simulado` | Pasarela de prueba (cuando `MP_MODO=mock`) | pagos |
+| `/pago/resultado` | Retorno de Mercado Pago | pagos + matricula |
+| `/comprobantes` | Mis comprobantes y descarga del PDF | comprobantes |
+| `/cuenta` | Mi cuenta y 2FA | matricula |
+| `/admin/resumen`, `/admin/cursos`, `/admin/inscripciones`, `/admin/pagos`, `/admin/comprobantes`, `/admin/notificaciones`, `/admin/seguridad` | Panel administrador | los 4 + gateway |
+
+Si el gateway bloquea la IP (403/429), el frontend lo muestra con un aviso global.
+
+---
+
+## 13. Base de datos en NeonDB
+
+Neon es PostgreSQL administrado en la nube (plan gratis: 100 proyectos, 1 GB de almacenamiento y 100 horas de cómputo al mes por proyecto, se suspende tras 5 min sin uso y despierta en la siguiente conexión). El código no cambia: **solo cambian las variables `DB_URL`, `DB_USER` y `DB_PASSWORD`**.
+
+1. Crea una cuenta en https://neon.com → **New project** (Postgres 17, región cercana a tu Render, ej. *AWS US West (Oregon)*).
+2. Crea las 4 bases. La forma más fácil es **Branches → main → Databases → New database**: `matricula_db`, `pagos_db`, `notificaciones_db`, `comprobantes_db`. Con SQL: `scripts/db/neon/01-crear-bases.sql`, una sentencia a la vez.
+3. *(Opcional, más aislamiento)* Un rol por servicio: `scripts/db/neon/02-roles-por-servicio.sql`, o **Roles → New role** en la consola.
+4. Obtén la conexión con el botón **Connect** → elige la base → desactiva *Connection pooling* (Flyway necesita conexión directa) → copia host, usuario y contraseña.
+5. Arma las variables de cada servicio (cambia el nombre de la base en cada uno):
+   ```
+   DB_URL=jdbc:postgresql://ep-xxxx-xxxx.us-west-2.aws.neon.tech/matricula_db?sslmode=require
+   DB_USER=neondb_owner
+   DB_PASSWORD=<la contraseña de Neon>
+   ```
+6. **Las tablas se crean solas**: al arrancar, cada servicio ejecuta sus migraciones Flyway (`db/migration/V1__*.sql`). No ejecutes el esquema a mano.
+7. El esquema completo de las 4 bases, para leerlo o entregarlo, está en `scripts/db/esquema-completo.sql`.
+
+**Probar Neon desde tu PC con Docker:** en `docker-compose.yml` cambia `DB_URL`, `DB_USER` y `DB_PASSWORD` del servicio por los de Neon (el contenedor `postgres` local deja de usarse).
+
+---
+
+## 14. Despliegue independiente en Render
+
+Cada microservicio se despliega como un **Web Service separado**: su propio contenedor, URL, logs, variables y reinicios. Si uno falla o se reinicia, los demás siguen atendiendo. El frontend es un **Static Site** (gratis y no se duerme).
+
+### Servicios externos gratuitos
+| Pieza | Servicio | Por qué |
+|---|---|---|
+| PostgreSQL | **Neon** (sección 13) | Render solo da Postgres gratis por 30 días |
+| RabbitMQ | **CloudAMQP**, plan *Little Lemur* | Render no ofrece RabbitMQ. Gratis: 20 conexiones, 1 M mensajes/mes |
+| Correo | **Brevo** (sección 9) | Render free bloquea los puertos SMTP |
+
+**CloudAMQP:** https://www.cloudamqp.com → *Create New Instance* → plan **Little Lemur (Free)** → elige una región → abre la instancia y copia la **AMQP URL** (empieza con `amqps://`). Esa es tu `RABBIT_URL`; Spring activa TLS solo por el `amqps://`.
+
+### Paso a paso
+1. **Sube el proyecto a GitHub** (con `frontend/`, `render.yaml` y los `Dockerfile` de cada servicio). Verifica que `.env` **no** se suba (está en `.gitignore`).
+2. En https://dashboard.render.com → **New → Blueprint** → conecta el repositorio. Render lee `render.yaml` y propone 6 servicios: `cursos-gateway`, `cursos-matricula`, `cursos-pagos`, `cursos-notificaciones`, `cursos-comprobantes` y `cursos-web`.
+3. Te pedirá las variables marcadas `sync: false`. En la primera pasada completa las que ya tienes (Neon, Brevo, `ADMIN_*`); las **URLs** de otros servicios aún no existen: escribe cualquier valor y corrígelas en el paso 5.
+4. **Apply**. Cada servicio compila su propia imagen (5–10 min la primera vez).
+5. Cuando estén creados, copia la URL de cada uno (arriba en su panel, ej. `https://cursos-pagos.onrender.com`) y ajusta:
+   | Dónde | Variable | Valor |
+   |---|---|---|
+   | Env Group `cursos-comun` | `RABBIT_URL` | URL `amqps://...` de CloudAMQP |
+   | Env Group `cursos-comun` | `FRONTEND_URL` | URL de `cursos-web` |
+   | cursos-gateway | `CORS_ORIGINS` | URL de `cursos-web` |
+   | cursos-gateway | `MATRICULA_URL`, `PAGOS_URL`, `NOTIFICACIONES_URL`, `COMPROBANTES_URL` | URL de cada servicio |
+   | cursos-matricula | `PAGOS_URL` | URL de `cursos-pagos` |
+   | cursos-pagos | `PUBLIC_URL` | URL de `cursos-gateway` (ahí llegan los webhooks de Mercado Pago, sin ngrok) |
+   | cursos-notificaciones | `MATRICULA_URL`, `COMPROBANTES_URL` | URL de cada uno |
+   | cursos-web | `API_URL` | URL de `cursos-gateway` |
+6. Guarda: Render vuelve a desplegar **solo** el servicio que cambiaste. El static site necesita **Manual Deploy** para tomar el nuevo `API_URL`.
+7. Abre `https://<tu-gateway>.onrender.com/api/estado`: los 4 servicios deben decir `"estado": "UP"` (si alguno dice `SIN_RESPUESTA`, está despertando: espera 1 min y recarga). Luego abre la URL de `cursos-web`.
+
+### Lo que debes saber del plan gratuito de Render
+- Un Web Service **se duerme tras 15 min sin tráfico** y tarda ~1 min en despertar. Por eso el gateway espera hasta 90 s. Antes de una demo abre `https://<tu-gateway>.onrender.com/api/estado`: esa consulta despierta a los 4 servicios.
+- Los eventos de RabbitMQ **no** despiertan a un servicio dormido: los mensajes esperan en su cola de CloudAMQP y se procesan apenas despierta, sin perderse.
+- Hay **750 horas gratis al mes por cuenta**, compartidas entre todos los servicios. No uses "pingers" que los mantengan despiertos todo el mes: 5 servicios encendidos 24/7 agotan las horas en ~6 días.
+- Los recordatorios de las 9:00 a. m. solo corren si `cursos-matricula` está despierto a esa hora; en la demo usa el botón **Enviar recordatorios de mañana** del panel admin.
+- Al hacer `git push`, Render redepliega **solo** el servicio cuyos archivos cambiaron (`buildFilter` en `render.yaml`).
+
+### Alternativa sin Blueprint
+**New → Web Service** por cada uno: *Language* `Docker`, *Dockerfile Path* `./pagos-service/Dockerfile`, *Docker Build Context Directory* `.`, *Health Check Path* `/actuator/health/liveness`, y las mismas variables. Para el frontend: **New → Static Site**, *Root Directory* `frontend`, *Build Command* `sed -i "s#https://api.tu-dominio.com#${API_URL}#" src/environments/environment.prod.ts && npm install && npx ng build --configuration production`, *Publish Directory* `dist/academia-web/browser`, variable `API_URL` = URL del gateway, y una regla *Rewrite* `/*` → `/index.html`.
+
+---
+
+## 15. Probar que un servicio caído no tumba a los demás
+
+**En tu PC (Docker):**
+```bash
+docker compose stop pagos-service
+```
+- La web sigue funcionando: catálogo, login, mis cursos, comprobantes, panel admin.
+- Al inscribirte, la inscripción se guarda igual y la web avisa que el link de pago se generará después.
+- http://localhost:8080/api/estado muestra `pagos` como `SIN_RESPUESTA` y el resto `UP`. En el panel admin solo falla la sección de pagos.
+- Tras varios fallos, el circuit breaker de *pagos* se abre: el gateway responde al instante `503 "El servicio de pagos no está disponible..."`.
+```bash
+docker compose start pagos-service      # en ~30 s vuelve a verde y "Mis cursos" permite generar el link
+```
+Repite con `notificaciones-service`: los mensajes de WhatsApp quedan en la cola `notificaciones.q` (míralo en http://localhost:15672) y salen todos al volver a encenderlo.
+
+**En Render:** en el panel de un servicio → **Suspend**. El resto sigue respondiendo; **Resume** para volver.

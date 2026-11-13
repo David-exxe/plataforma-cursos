@@ -1,5 +1,5 @@
 server:
-  port: 8082
+  port: ${PORT:8082}          # Render asigna PORT automaticamente
 
 spring:
   application:
@@ -8,6 +8,12 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/pagos_db}
     username: ${DB_USER:pagos_user}
     password: ${DB_PASSWORD:pagos_pass}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:5}   # Neon free: pocas conexiones por servicio
+      minimum-idle: 1
+      connection-timeout: 30000             # Neon puede tardar unos segundos en "despertar"
+      idle-timeout: 120000
+      max-lifetime: 600000
   jpa:
     hibernate:
       ddl-auto: none
@@ -15,11 +21,12 @@ spring:
     properties:
       hibernate.jdbc.time_zone: UTC
   rabbitmq:
-    host: ${RABBIT_HOST:localhost}
-    port: 5672
-    username: ${RABBIT_USER:guest}
-    password: ${RABBIT_PASSWORD:guest}
+    # Local: amqp://usuario:clave@localhost:5672  |  CloudAMQP: amqps://usuario:clave@host/vhost (TLS automatico)
+    addresses: ${RABBIT_URL:amqp://guest:guest@localhost:5672}
     publisher-confirm-type: simple
+
+app:
+  outbox-intervalo-ms: ${OUTBOX_INTERVALO_MS:2000}
 
 mercadopago:
   # real = llama a la API de Mercado Pago | mock = simula (para desarrollo sin credenciales)
@@ -43,3 +50,11 @@ management:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true          # /actuator/health/liveness (Render) y /readiness
+      show-components: always # el gateway muestra db / rabbit en "Estado del sistema"
+  health:
+    mail:
+      enabled: false

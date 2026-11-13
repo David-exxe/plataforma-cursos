@@ -1,19 +1,16 @@
 package com.academia.comprobantes.comprobante;
 
+import com.academia.comprobantes.comun.CorreoSender;
 import com.academia.comprobantes.config.RabbitConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -46,30 +43,27 @@ public class ComprobanteService {
     private final ComprobanteRepository repo;
     private final ComprobantePdfRepository pdfs;
     private final PdfComprobanteGenerator generador;
-    private final JavaMailSender mail;
+    private final CorreoSender correo;
     private final RabbitTemplate rabbit;
     private final ObjectMapper mapper;
     private final TransactionTemplate tx;
     private final String serie;
-    private final String remitente;
     private final String empresa;
     private final int maxIntentos;
 
     public ComprobanteService(ComprobanteRepository repo, ComprobantePdfRepository pdfs, PdfComprobanteGenerator generador,
-                              JavaMailSender mail, RabbitTemplate rabbit, ObjectMapper mapper, PlatformTransactionManager tm,
+                              CorreoSender correo, RabbitTemplate rabbit, ObjectMapper mapper, PlatformTransactionManager tm,
                               @Value("${comprobante.serie}") String serie,
-                              @Value("${comprobante.remitente}") String remitente,
                               @Value("${comprobante.empresa}") String empresa,
                               @Value("${comprobante.max-intentos}") int maxIntentos) {
         this.repo = repo;
         this.pdfs = pdfs;
         this.generador = generador;
-        this.mail = mail;
+        this.correo = correo;
         this.rabbit = rabbit;
         this.mapper = mapper;
         this.tx = new TransactionTemplate(tm);
         this.serie = serie;
-        this.remitente = remitente;
         this.empresa = empresa;
         this.maxIntentos = maxIntentos;
     }
@@ -172,19 +166,14 @@ public class ComprobanteService {
     }
 
     private void enviarCorreo(Comprobante c, byte[] pdf) throws Exception {
-        MimeMessage m = mail.createMimeMessage();
-        MimeMessageHelper h = new MimeMessageHelper(m, true, "UTF-8");
-        h.setFrom(remitente);
-        h.setTo(c.getEmail());
-        h.setSubject("Comprobante de pago " + c.getNumero() + " - " + c.getCursoNombre());
-        h.setText("<div style='font-family:Arial,sans-serif;max-width:560px'>"
+        String html = "<div style='font-family:Arial,sans-serif;max-width:560px'>"
                 + "<p>Hola " + HtmlUtils.htmlEscape(c.getEstudianteNombre()) + ",</p>"
                 + "<p>Gracias por tu pago. Adjuntamos tu comprobante <b>" + c.getNumero() + "</b> por el curso <b>"
                 + HtmlUtils.htmlEscape(c.getCursoNombre()) + "</b>.</p>"
                 + "<p><b>Total:</b> " + c.getMoneda() + " " + c.getMonto() + "</p>"
-                + "<p>Saludos,<br>" + HtmlUtils.htmlEscape(empresa) + "</p></div>", true);
-        h.addAttachment(c.getNumero() + ".pdf", new ByteArrayResource(pdf), "application/pdf");
-        mail.send(m);
+                + "<p>Saludos,<br>" + HtmlUtils.htmlEscape(empresa) + "</p></div>";
+        correo.enviar(c.getEmail(), "Comprobante de pago " + c.getNumero() + " - " + c.getCursoNombre(),
+                html, c.getNumero() + ".pdf", pdf);
     }
 
     private void publicar(String tipo, Comprobante c, String error) {

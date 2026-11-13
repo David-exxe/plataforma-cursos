@@ -8,14 +8,19 @@ import java.util.List;
 public record IpBloqueoProperties(
         List<String> listaNegra,
         List<String> listaBlanca,
-        boolean confiarXForwardedFor,
+        List<String> cabecerasIpCliente,
         int maxPeticionesPorMinuto,
         int maxLoginsFallidos,
         int ventanaLoginsFallidosMinutos,
         int minutosBloqueo
 ) {
     public IpBloqueoProperties {
-        listaNegra = listaNegra == null ? List.of() : listaNegra.stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
-        listaBlanca = listaBlanca == null ? List.of() : listaBlanca.stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
+        listaNegra = limpiar(listaNegra);
+        listaBlanca = limpiar(listaBlanca);
+        cabecerasIpCliente = limpiar(cabecerasIpCliente);
+    }
+
+    private static List<String> limpiar(List<String> l) {
+        return l == null ? List.of() : l.stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 }

@@ -1,30 +1,33 @@
 server:
-  port: 8080
+  port: ${PORT:8080}            # Render asigna PORT automaticamente
 
 spring:
   application:
     name: api-gateway
 
-# URLs internas de cada microservicio (en docker-compose se sobreescriben por variables de entorno)
+# URL de cada microservicio. Local/Docker: http://matricula-service:8081
+# Render: la URL publica de cada web service, ej. https://cursos-matricula.onrender.com
 servicios:
   matricula: ${MATRICULA_URL:http://localhost:8081}
   pagos: ${PAGOS_URL:http://localhost:8082}
   notificaciones: ${NOTIFICACIONES_URL:http://localhost:8083}
   comprobantes: ${COMPROBANTES_URL:http://localhost:8084}
+  # Tiempo maximo de espera por microservicio. En Render free un servicio dormido tarda ~1 min en despertar.
+  timeout-segundos: ${TIMEOUT_SERVICIOS_SEG:90}
 
 seguridad:
   jwt:
     secreto: ${JWT_SECRET}           # Base64, minimo 32 bytes (ver scripts/generar-secretos.sh)
     emisor: plataforma-cursos
   cors:
+    # Varias URLs separadas por coma: http://localhost:4200,https://cursos-web.onrender.com
     origenes-permitidos: ${CORS_ORIGINS:http://localhost:4200}
   ip:
-    # IPs bloqueadas de forma permanente (separadas por coma). Acepta prefijos: "203.0.113."
     lista-negra: ${IP_LISTA_NEGRA:}
-    # IPs que nunca se bloquean (ej. tu IP de oficina, el host de docker)
     lista-blanca: ${IP_LISTA_BLANCA:127.0.0.1,0:0:0:0:0:0:0:1}
-    # Solo activar si hay un balanceador/proxy delante que ponga X-Forwarded-For
-    confiar-x-forwarded-for: ${CONFIAR_XFF:false}
+    # Detras de un proxy (Render, Cloudflare, Nginx) la IP real viene en una cabecera.
+    # Vacio = usar la IP de la conexion (local/Docker). En Render: CF-Connecting-IP,True-Client-IP,X-Forwarded-For
+    cabeceras-ip-cliente: ${IP_CABECERAS:}
     max-peticiones-por-minuto: ${MAX_RPM:120}
     max-logins-fallidos: 5
     ventana-logins-fallidos-minutos: 15
@@ -35,6 +38,10 @@ management:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
 
 logging:
   level:

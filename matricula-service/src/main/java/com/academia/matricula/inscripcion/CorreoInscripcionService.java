@@ -1,13 +1,11 @@
 package com.academia.matricula.inscripcion;
 
+import com.academia.matricula.comun.CorreoSender;
 import com.academia.matricula.curso.Curso;
 import com.academia.matricula.curso.Modalidad;
-import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -29,18 +27,15 @@ public class CorreoInscripcionService {
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final InscripcionRepository repo;
-    private final JavaMailSender mail;
+    private final CorreoSender correo;
     private final TransactionTemplate tx;
-    private final String remitente;
     private final String frontend;
 
-    public CorreoInscripcionService(InscripcionRepository repo, JavaMailSender mail, PlatformTransactionManager tm,
-                                    @Value("${app.correo-remitente}") String remitente,
+    public CorreoInscripcionService(InscripcionRepository repo, CorreoSender correo, PlatformTransactionManager tm,
                                     @Value("${app.frontend-url}") String frontend) {
         this.repo = repo;
-        this.mail = mail;
+        this.correo = correo;
         this.tx = new TransactionTemplate(tm);
-        this.remitente = remitente;
         this.frontend = frontend;
     }
 
@@ -51,8 +46,8 @@ public class CorreoInscripcionService {
         boolean info = !i.isCorreoInfoEnviado();
         boolean invitacion = i.getEstado() == EstadoInscripcion.PAGADA && !i.isCorreoInvitacionEnviado();
         try {
-            if (info) enviarHtml(i.getUsuario().getEmail(), "Tu inscripcion a " + i.getCurso().getNombre(), htmlInformacion(i));
-            if (invitacion) enviarHtml(i.getUsuario().getEmail(), "Invitacion: " + i.getCurso().getNombre(), htmlInvitacion(i));
+            if (info) correo.enviar(i.getUsuario().getEmail(), "Tu inscripcion a " + i.getCurso().getNombre(), htmlInformacion(i));
+            if (invitacion) correo.enviar(i.getUsuario().getEmail(), "Invitacion: " + i.getCurso().getNombre(), htmlInvitacion(i));
             tx.executeWithoutResult(s -> repo.findById(inscripcionId).ifPresent(x -> {
                 if (info) x.setCorreoInfoEnviado(true);
                 if (invitacion) x.setCorreoInvitacionEnviado(true);
@@ -63,16 +58,6 @@ public class CorreoInscripcionService {
                 x.setIntentosCorreo(x.getIntentosCorreo() + 1);
             }));
         }
-    }
-
-    private void enviarHtml(String para, String asunto, String html) throws Exception {
-        MimeMessage m = mail.createMimeMessage();
-        MimeMessageHelper h = new MimeMessageHelper(m, false, "UTF-8");
-        h.setFrom(remitente);
-        h.setTo(para);
-        h.setSubject(asunto);
-        h.setText(html, true);
-        mail.send(m);
     }
 
     private String htmlInformacion(Inscripcion i) {

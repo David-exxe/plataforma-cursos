@@ -1,26 +1,41 @@
-# Levantar todo:   docker compose up -d --build
-# Gateway (unica puerta para Angular): http://localhost:8080
-# RabbitMQ UI: http://localhost:15672   |   Mailpit (correos de prueba): http://localhost:8025
+# Levantar TODO (backend + frontend):   docker compose up -d --build
+#   Frontend Angular:   http://localhost:4200
+#   API Gateway:        http://localhost:8080
+#   RabbitMQ:           http://localhost:15672
+#   Correos (Mailpit):  http://localhost:8025
+#
+# Cada microservicio es un contenedor independiente con su propia imagen:
+#   docker compose stop pagos-service    -> la web sigue funcionando (prueba de tolerancia a fallos)
+#   docker compose start pagos-service
 name: plataforma-cursos
 
 x-servicio: &servicio
-  build:
-    context: .
   restart: unless-stopped
   networks: [interna]
-  environment: &env-comun
-    JWT_SECRET: ${JWT_SECRET}
-    INTERNAL_API_KEY: ${INTERNAL_API_KEY}
-    RABBIT_HOST: rabbitmq
-    RABBIT_USER: ${RABBIT_USER}
-    RABBIT_PASSWORD: ${RABBIT_PASSWORD}
-    FRONTEND_URL: ${FRONTEND_URL}
-    TZ: America/Lima
   depends_on:
     postgres: { condition: service_healthy }
     rabbitmq: { condition: service_healthy }
 
+x-env-comun: &env-comun
+  JWT_SECRET: ${JWT_SECRET}
+  INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+  RABBIT_URL: amqp://${RABBIT_USER}:${RABBIT_PASSWORD}@rabbitmq:5672
+  FRONTEND_URL: ${FRONTEND_URL}
+  TZ: America/Lima
+
+x-env-correo: &env-correo
+  CORREO_PROVEEDOR: ${CORREO_PROVEEDOR:-smtp}
+  BREVO_API_KEY: ${BREVO_API_KEY:-}
+  MAIL_HOST: ${MAIL_HOST}
+  MAIL_PORT: ${MAIL_PORT}
+  MAIL_USER: ${MAIL_USER}
+  MAIL_PASSWORD: ${MAIL_PASSWORD}
+  MAIL_AUTH: ${MAIL_AUTH}
+  MAIL_TLS: ${MAIL_TLS}
+  MAIL_FROM: ${MAIL_FROM}
+
 services:
+  # ---------------- Infraestructura ----------------
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -34,7 +49,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/db/00-crear-bases.sh:/docker-entrypoint-initdb.d/00-crear-bases.sh:ro
-    ports: ["5432:5432"]          # solo para revisar con DBeaver/pgAdmin en desarrollo
+    ports: ["5432:5432"]
     networks: [interna]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -54,33 +69,48 @@ services:
       interval: 10s
       retries: 10
 
-  mailpit:                         # servidor SMTP falso: atrapa todos los correos
+  mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports: ["8025:8025"]
     networks: [interna]
 
+  # ---------------- Frontend ----------------
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        API_URL: http://localhost:8080    # el NAVEGADOR llama al gateway por localhost
+    restart: unless-stopped
+    ports: ["4200:80"]
+    networks: [interna]
+    depends_on: [api-gateway]
+
+  # ---------------- Backend ----------------
   api-gateway:
-    build: { context: ., args: { MODULO: api-gateway } }
+    build: { context: ., dockerfile: api-gateway/Dockerfile }
     restart: unless-stopped
     networks: [interna]
-    ports: ["8080:8080"]           # el UNICO puerto de la app expuesto al exterior
+    ports: ["8080:8080"]
     environment:
+      PORT: 8080
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGINS: ${FRONTEND_URL}
       MATRICULA_URL: http://matricula-service:8081
       PAGOS_URL: http://pagos-service:8082
       NOTIFICACIONES_URL: http://notificaciones-service:8083
       COMPROBANTES_URL: http://comprobantes-service:8084
+      TIMEOUT_SERVICIOS_SEG: 20
       IP_LISTA_NEGRA: ${IP_LISTA_NEGRA:-}
-      MAX_RPM: ${MAX_RPM:-120}
-    depends_on: [matricula-service, pagos-service, notificaciones-service, comprobantes-service]
+      MAX_RPM: ${MAX_RPM:-300}
+    # Sin depends_on de los servicios: el gateway arranca aunque alguno este caido
 
   matricula-service:
     <<: *servicio
-    build: { context: ., args: { MODULO: matricula-service } }
+    build: { context: ., dockerfile: matricula-service/Dockerfile }
     environment:
-      <<: *env-comun
+      <<: [*env-comun, *env-correo]
+      PORT: 8081
       DB_URL: jdbc:postgresql://postgres:5432/matricula_db
       DB_USER: matricula_user
       DB_PASSWORD: ${MATRICULA_DB_PASSWORD}
@@ -89,19 +119,13 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_TELEFONO: ${ADMIN_TELEFONO}
       PAGOS_URL: http://pagos-service:8082
-      MAIL_HOST: ${MAIL_HOST}
-      MAIL_PORT: ${MAIL_PORT}
-      MAIL_USER: ${MAIL_USER}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
-      MAIL_AUTH: ${MAIL_AUTH}
-      MAIL_TLS: ${MAIL_TLS}
-      MAIL_FROM: ${MAIL_FROM}
 
   pagos-service:
     <<: *servicio
-    build: { context: ., args: { MODULO: pagos-service } }
+    build: { context: ., dockerfile: pagos-service/Dockerfile }
     environment:
       <<: *env-comun
+      PORT: 8082
       DB_URL: jdbc:postgresql://postgres:5432/pagos_db
       DB_USER: pagos_user
       DB_PASSWORD: ${PAGOS_DB_PASSWORD}
@@ -112,9 +136,10 @@ services:
 
   notificaciones-service:
     <<: *servicio
-    build: { context: ., args: { MODULO: notificaciones-service } }
+    build: { context: ., dockerfile: notificaciones-service/Dockerfile }
     environment:
       <<: *env-comun
+      PORT: 8083
       DB_URL: jdbc:postgresql://postgres:5432/notificaciones_db
       DB_USER: notificaciones_user
       DB_PASSWORD: ${NOTIFICACIONES_DB_PASSWORD}
@@ -130,19 +155,13 @@ services:
 
   comprobantes-service:
     <<: *servicio
-    build: { context: ., args: { MODULO: comprobantes-service } }
+    build: { context: ., dockerfile: comprobantes-service/Dockerfile }
     environment:
-      <<: *env-comun
+      <<: [*env-comun, *env-correo]
+      PORT: 8084
       DB_URL: jdbc:postgresql://postgres:5432/comprobantes_db
       DB_USER: comprobantes_user
       DB_PASSWORD: ${COMPROBANTES_DB_PASSWORD}
-      MAIL_HOST: ${MAIL_HOST}
-      MAIL_PORT: ${MAIL_PORT}
-      MAIL_USER: ${MAIL_USER}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
-      MAIL_AUTH: ${MAIL_AUTH}
-      MAIL_TLS: ${MAIL_TLS}
-      MAIL_FROM: ${MAIL_FROM}
       EMPRESA_NOMBRE: ${EMPRESA_NOMBRE}
       EMPRESA_RUC: ${EMPRESA_RUC}
 

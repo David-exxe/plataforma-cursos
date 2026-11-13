@@ -2,14 +2,22 @@ package com.academia.gateway.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.route.RouteLocator;
+import org.springframework.cloud.gateway.route.builder.GatewayFilterSpec;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import static org.springframework.cloud.gateway.support.RouteMetadataUtils.CONNECT_TIMEOUT_ATTR;
+import static org.springframework.cloud.gateway.support.RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR;
+
 /**
- * Enrutamiento: el frontend Angular solo conoce el gateway (puerto 8080).
- * Las rutas /internal/** NO se publican: son solo para comunicacion entre servicios.
- * Se quita cualquier cabecera X-Internal-Key que venga de afuera para que nadie la falsifique.
+ * Enrutamiento: el frontend Angular solo conoce el gateway.
+ * Cada ruta tiene su PROPIO circuit breaker (mismo nombre que el servicio):
+ * si "pagos" se cae, solo se abre el circuito de pagos y catalogo, login, comprobantes y bot
+ * siguen funcionando con normalidad. Mientras el circuito esta abierto, el gateway responde
+ * al instante con /fallback/{servicio} (503 + mensaje claro) en vez de colgarse esperando.
+ *
+ * Las rutas /internal/** NO se publican y se elimina cualquier X-Internal-Key que venga de afuera.
  */
 @Configuration
 public class RutasConfig {
@@ -19,21 +27,43 @@ public class RutasConfig {
                               @Value("${servicios.matricula}") String matricula,
                               @Value("${servicios.pagos}") String pagos,
                               @Value("${servicios.notificaciones}") String notificaciones,
-                              @Value("${servicios.comprobantes}") String comprobantes) {
+                              @Value("${servicios.comprobantes}") String comprobantes,
+                              @Value("${servicios.timeout-segundos}") int timeoutSeg) {
+        int respuestaMs = timeoutSeg * 1000;
+        int conexionMs = 10_000;
         return builder.routes()
-                .route("matricula", r -> r.path("/api/auth/**", "/api/cursos/**", "/api/inscripciones/**",
-                                "/api/admin/cursos/**", "/api/admin/inscripciones/**", "/api/admin/recordatorios/**")
-                        .filters(f -> f.removeRequestHeader("X-Internal-Key"))
-                        .uri(matricula))
-                .route("pagos", r -> r.path("/api/pagos/**", "/api/admin/pagos/**", "/webhooks/mercadopago")
-                        .filters(f -> f.removeRequestHeader("X-Internal-Key"))
-                        .uri(pagos))
-                .route("notificaciones", r -> r.path("/api/admin/notificaciones/**", "/webhooks/whatsapp")
-                        .filters(f -> f.removeRequestHeader("X-Internal-Key"))
-                        .uri(notificaciones))
-                .route("comprobantes", r -> r.path("/api/comprobantes/**", "/api/admin/comprobantes/**")
-                        .filters(f -> f.removeRequestHeader("X-Internal-Key"))
-                        .uri(comprobantes))
+                .route("matricula", r -> r.path("/api/auth/**", "/api/cursos", "/api/cursos/**", "/api/inscripciones",
+                                "/api/inscripciones/**", "/api/admin/cursos", "/api/admin/cursos/**", "/api/admin/inscripciones",
+                                "/api/admin/inscripciones/**", "/api/admin/recordatorios/**")
+                        .filters(f -> comunes(f, "matricula"))
+                        .uri(matricula)
+                        .metadata(RESPONSE_TIMEOUT_ATTR, respuestaMs)
+                        .metadata(CONNECT_TIMEOUT_ATTR, conexionMs))
+                .route("pagos", r -> r.path("/api/pagos/**", "/api/admin/pagos", "/api/admin/pagos/**", "/webhooks/mercadopago")
+                        .filters(f -> comunes(f, "pagos"))
+                        .uri(pagos)
+                        .metadata(RESPONSE_TIMEOUT_ATTR, respuestaMs)
+                        .metadata(CONNECT_TIMEOUT_ATTR, conexionMs))
+                .route("notificaciones", r -> r.path("/api/bot/**", "/api/admin/notificaciones", "/api/admin/notificaciones/**",
+                                "/webhooks/whatsapp")
+                        .filters(f -> comunes(f, "notificaciones"))
+                        .uri(notificaciones)
+                        .metadata(RESPONSE_TIMEOUT_ATTR, respuestaMs)
+                        .metadata(CONNECT_TIMEOUT_ATTR, conexionMs))
+                .route("comprobantes", r -> r.path("/api/comprobantes/**", "/api/admin/comprobantes", "/api/admin/comprobantes/**")
+                        .filters(f -> comunes(f, "comprobantes"))
+                        .uri(comprobantes)
+                        .metadata(RESPONSE_TIMEOUT_ATTR, respuestaMs)
+                        .metadata(CONNECT_TIMEOUT_ATTR, conexionMs))
                 .build();
+    }
+
+    private static GatewayFilterSpec comunes(GatewayFilterSpec f, String servicio) {
+        return f.removeRequestHeader("X-Internal-Key")
+                .circuitBreaker(c -> c.setName(servicio)
+                        .setFallbackUri("forward:/fallback/" + servicio)
+                        // 502/504 = el proxy (Render) no pudo llegar al servicio -> cuenta como caida
+                        .addStatusCode("502")
+                        .addStatusCode("504"));
     }
 }

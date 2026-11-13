@@ -38,7 +38,7 @@ public class SeguridadConfig {
             .cors(c -> c.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a -> a
-                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/webhooks/**").permitAll()   // protegidos con firma HMAC
                 .requestMatchers("/internal/**").permitAll()   // protegidos con ClaveInternaFilter
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")

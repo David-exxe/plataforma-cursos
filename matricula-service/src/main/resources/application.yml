@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: ${PORT:8081}          # Render asigna PORT automaticamente
 
 spring:
   application:
@@ -8,6 +8,12 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/matricula_db}
     username: ${DB_USER:matricula_user}
     password: ${DB_PASSWORD:matricula_pass}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:5}   # Neon free: pocas conexiones por servicio
+      minimum-idle: 1
+      connection-timeout: 30000             # Neon puede tardar unos segundos en "despertar"
+      idle-timeout: 120000
+      max-lifetime: 600000
   jpa:
     hibernate:
       ddl-auto: none          # el esquema lo maneja Flyway (scripts en db/migration)
@@ -17,10 +23,8 @@ spring:
   flyway:
     enabled: true
   rabbitmq:
-    host: ${RABBIT_HOST:localhost}
-    port: 5672
-    username: ${RABBIT_USER:guest}
-    password: ${RABBIT_PASSWORD:guest}
+    # Local: amqp://usuario:clave@localhost:5672  |  CloudAMQP: amqps://usuario:clave@host/vhost (TLS automatico)
+    addresses: ${RABBIT_URL:amqp://guest:guest@localhost:5672}
     publisher-confirm-type: simple
     listener:
       simple:
@@ -43,8 +47,8 @@ spring:
 
 app:
   zona-horaria: America/Lima
+  outbox-intervalo-ms: ${OUTBOX_INTERVALO_MS:2000}   # cada cuanto se publican los eventos pendientes
   frontend-url: ${FRONTEND_URL:http://localhost:4200}
-  correo-remitente: ${MAIL_FROM:Academia <no-responder@academia.pe>}
   admin:
     email: ${ADMIN_EMAIL:admin@academia.pe}
     password: ${ADMIN_PASSWORD:}          # si esta vacio no se crea el admin
@@ -63,8 +67,21 @@ seguridad:
   max-intentos-login: 5
   minutos-bloqueo-cuenta: 15
 
+correo:
+  proveedor: ${CORREO_PROVEEDOR:smtp}      # smtp (local) | brevo (Render free bloquea SMTP)
+  remitente: ${MAIL_FROM:Academia <no-responder@academia.pe>}
+  brevo-api-key: ${BREVO_API_KEY:}
+
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true          # /actuator/health/liveness (Render) y /readiness
+      show-components: always # el gateway muestra db / rabbit en "Estado del sistema"
+  health:
+    mail:
+      enabled: false

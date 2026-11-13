@@ -13,7 +13,6 @@ import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
@@ -26,16 +25,16 @@ import java.time.Instant;
 public class IpBloqueoFilter implements WebFilter {
 
     private final IpBloqueoService servicio;
-    private final IpBloqueoProperties props;
+    private final ClienteIpResolver ipResolver;
 
-    public IpBloqueoFilter(IpBloqueoService servicio, IpBloqueoProperties props) {
+    public IpBloqueoFilter(IpBloqueoService servicio, ClienteIpResolver ipResolver) {
         this.servicio = servicio;
-        this.props = props;
+        this.ipResolver = ipResolver;
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
-        String ip = obtenerIp(exchange);
+        String ip = ipResolver.resolver(exchange);
 
         Instant hasta = servicio.bloqueadaHasta(ip);
         if (hasta != null) {
@@ -58,15 +57,6 @@ public class IpBloqueoFilter implements WebFilter {
                 }
             }
         });
-    }
-
-    private String obtenerIp(ServerWebExchange exchange) {
-        if (props.confiarXForwardedFor()) {
-            String xff = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
-            if (xff != null && !xff.isBlank()) return xff.split(",")[0].trim();
-        }
-        InetSocketAddress remoto = exchange.getRequest().getRemoteAddress();
-        return (remoto != null && remoto.getAddress() != null) ? remoto.getAddress().getHostAddress() : "desconocida";
     }
 
     private Mono<Void> responder(ServerHttpResponse resp, HttpStatus status, String json) {

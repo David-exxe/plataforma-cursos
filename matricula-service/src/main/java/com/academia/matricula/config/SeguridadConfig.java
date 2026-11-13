@@ -52,7 +52,7 @@ public class SeguridadConfig {
             .cors(c -> c.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a -> a
-                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/registro", "/api/auth/login", "/api/auth/2fa/verificar").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/cursos", "/api/cursos/**").permitAll()
                 .requestMatchers("/internal/**").permitAll()          // protegido por ClaveInternaFilter

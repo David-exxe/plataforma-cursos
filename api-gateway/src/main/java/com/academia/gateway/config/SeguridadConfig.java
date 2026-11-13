@@ -61,7 +61,10 @@ public class SeguridadConfig {
                 .cors(c -> c.configurationSource(corsConfigurationSource()))
                 .authorizeExchange(ex -> ex
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .pathMatchers("/actuator/health").permitAll()
+                        .pathMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        // Estado del sistema (publico) y respuestas de respaldo del circuit breaker
+                        .pathMatchers(HttpMethod.GET, "/api/estado", "/api/mi-ip").permitAll()
+                        .pathMatchers("/fallback/**").permitAll()
                         // Publico: registro, login y segundo paso del 2FA
                         .pathMatchers(HttpMethod.POST, "/api/auth/registro", "/api/auth/login", "/api/auth/2fa/verificar").permitAll()
                         // Catalogo publico

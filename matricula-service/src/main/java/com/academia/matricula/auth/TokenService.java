@@ -43,6 +43,7 @@ public class TokenService {
                 .id(UUID.randomUUID().toString())
                 .claim("email", u.getEmail())
                 .claim("nombre", u.getNombre())
+                .claim("telefono", u.getTelefono())      // lo usa el chat web del bot
                 .claim("roles", List.of(u.getRol().name()))
                 .claim("mfa", u.isTotpHabilitado())
                 .build();
