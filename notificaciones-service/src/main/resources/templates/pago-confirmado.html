@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pago confirmado</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#ffffff;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#1d4ed8;padding:24px 32px;color:#ffffff;">
+              <div style="font-size:14px;letter-spacing:1px;text-transform:uppercase;opacity:0.85;">{{empresa}}</div>
+              <div style="font-size:22px;font-weight:bold;margin-top:6px;">Pago confirmado</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px 8px 32px;font-size:15px;line-height:1.6;">
+              <p style="margin:0 0 12px 0;">Hola <strong>{{nombre}}</strong>,</p>
+              <p style="margin:0;">Recibimos tu pago y tu inscripci&oacute;n al curso <strong>{{curso}}</strong> qued&oacute; <strong>confirmada</strong>. &iexcl;Gracias por confiar en nosotros!</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:6px;font-size:14px;">
+                <tr>
+                  <td style="padding:12px 16px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Curso</td>
+                  <td align="right" style="padding:12px 16px;font-weight:bold;border-bottom:1px solid #e5e7eb;">{{curso}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 16px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Monto pagado</td>
+                  <td align="right" style="padding:12px 16px;font-weight:bold;border-bottom:1px solid #e5e7eb;">{{monto}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 16px;color:#6b7280;border-bottom:1px solid #e5e7eb;">N.&ordm; de operaci&oacute;n</td>
+                  <td align="right" style="padding:12px 16px;font-weight:bold;border-bottom:1px solid #e5e7eb;">{{operacion}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 16px;color:#6b7280;">Fecha</td>
+                  <td align="right" style="padding:12px 16px;font-weight:bold;">{{fecha}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:8px 32px 24px 32px;">
+              <a href="{{enlace}}" style="display:inline-block;background-color:#1d4ed8;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;padding:12px 28px;border-radius:6px;">Ver mis inscripciones</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px 24px 32px;font-size:13px;line-height:1.5;color:#6b7280;">
+              Tu comprobante de pago te llegar&aacute; en un correo aparte. Guarda este mensaje como constancia de tu operaci&oacute;n.
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f9fafb;padding:16px 32px;font-size:12px;color:#9ca3af;text-align:center;">
+              &copy; {{anio}} {{empresa}}. Este es un mensaje autom&aacute;tico, por favor no respondas a este correo.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
