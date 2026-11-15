@@ -1,0 +1,11 @@
+target/
+.env
+.idea/
+*.iml
+.vscode/
+node_modules/
+frontend/dist/
+frontend/.angular/
+comprobante-demo.pdf
+hs_err_pid*.log
+replay_pid*.log

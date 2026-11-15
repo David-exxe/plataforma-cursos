@@ -1,0 +1,62 @@
+server:
+  port: ${PORT:8082}          # Render asigna PORT automaticamente
+
+spring:
+  application:
+    name: pagos-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/pagos_db}
+    username: ${DB_USER:pagos_user}
+    password: ${DB_PASSWORD:pagos_pass}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:5}   # Neon free: pocas conexiones por servicio
+      minimum-idle: 1
+      connection-timeout: 30000             # Neon puede tardar unos segundos en "despertar"
+      idle-timeout: 120000
+      max-lifetime: 600000
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  rabbitmq:
+    # Local: amqp://usuario:clave@localhost:5672  |  CloudAMQP: amqps://usuario:clave@host/vhost (TLS automatico)
+    addresses: ${RABBIT_URL:amqp://guest:guest@localhost:5672}
+    publisher-confirm-type: simple
+
+app:
+  outbox-intervalo-ms: ${OUTBOX_INTERVALO_MS:2000}
+
+mercadopago:
+  # real = llama a la API de Mercado Pago (SDK oficial) | mock = simula (desarrollo sin credenciales)
+  modo: ${MP_MODO:mock}
+  access-token: ${MP_ACCESS_TOKEN:}          # TEST-xxxx (sandbox) o APP_USR-xxxx (produccion). NUNCA en el repositorio
+  webhook-secret: ${MP_WEBHOOK_SECRET:}      # "Clave secreta" de Tus integraciones > Webhooks (obligatoria con MP_MODO=real)
+  # URL publica del GATEWAY: ahi enviara Mercado Pago los webhooks (ngrok en desarrollo)
+  url-publica: ${PUBLIC_URL:http://localhost:8080}
+  frontend-url: ${FRONTEND_URL:http://localhost:4200}
+  descriptor: ACADEMIACURSOS                 # max. 16 caracteres, aparece en el resumen de la tarjeta
+  preferencia-horas: ${MP_PREFERENCIA_HORAS:48}   # el link de pago caduca; la conciliacion mira 3 dias
+  timeout-conexion-ms: ${MP_TIMEOUT_CONEXION_MS:3000}
+  timeout-lectura-ms: ${MP_TIMEOUT_LECTURA_MS:10000}
+
+seguridad:
+  jwt:
+    secreto: ${JWT_SECRET}
+    emisor: plataforma-cursos
+  clave-interna: ${INTERNAL_API_KEY}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true          # /actuator/health/liveness (Render) y /readiness
+      show-components: always # el gateway muestra db / rabbit en "Estado del sistema"
+  health:
+    mail:
+      enabled: false

@@ -1,0 +1,6 @@
+# Los scripts .sh deben quedar con saltos de linea Linux (LF) aunque edites en Windows;
+# si se convierten a CRLF fallan dentro de Docker y en Render.
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf

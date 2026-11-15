@@ -1,0 +1,87 @@
+server:
+  port: ${PORT:8081}          # Render asigna PORT automaticamente
+
+spring:
+  application:
+    name: matricula-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/matricula_db}
+    username: ${DB_USER:matricula_user}
+    password: ${DB_PASSWORD:matricula_pass}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:5}   # Neon free: pocas conexiones por servicio
+      minimum-idle: 1
+      connection-timeout: 30000             # Neon puede tardar unos segundos en "despertar"
+      idle-timeout: 120000
+      max-lifetime: 600000
+  jpa:
+    hibernate:
+      ddl-auto: none          # el esquema lo maneja Flyway (scripts en db/migration)
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+  rabbitmq:
+    # Local: amqp://usuario:clave@localhost:5672  |  CloudAMQP: amqps://usuario:clave@host/vhost (TLS automatico)
+    addresses: ${RABBIT_URL:amqp://guest:guest@localhost:5672}
+    publisher-confirm-type: simple
+    listener:
+      simple:
+        default-requeue-rejected: false   # agotados los reintentos -> Dead Letter Queue
+        retry:
+          enabled: true
+          max-attempts: 4
+          initial-interval: 2s
+          multiplier: 3
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USER:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_TLS:false}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+
+app:
+  zona-horaria: America/Lima
+  outbox-intervalo-ms: ${OUTBOX_INTERVALO_MS:2000}   # cada cuanto se publican los eventos pendientes
+  frontend-url: ${FRONTEND_URL:http://localhost:4200}
+  admin:
+    email: ${ADMIN_EMAIL:admin@academia.pe}
+    password: ${ADMIN_PASSWORD:}          # si esta vacio no se crea el admin
+    telefono: ${ADMIN_TELEFONO:51999999999}
+  pagos-url: ${PAGOS_URL:http://localhost:8082}
+  inscripcion-horas-vencimiento: 72
+
+seguridad:
+  jwt:
+    secreto: ${JWT_SECRET}
+    emisor: plataforma-cursos
+    minutos-expiracion: 60
+    minutos-expiracion-2fa: 5
+  clave-interna: ${INTERNAL_API_KEY}
+  clave-cifrado: ${ENCRYPTION_KEY}        # Base64 de 32 bytes, cifra los secretos TOTP
+  max-intentos-login: 5
+  minutos-bloqueo-cuenta: 15
+
+correo:
+  proveedor: ${CORREO_PROVEEDOR:smtp}      # smtp (local) | brevo (Render free bloquea SMTP)
+  remitente: ${MAIL_FROM:Academia <no-responder@academia.pe>}
+  brevo-api-key: ${BREVO_API_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true          # /actuator/health/liveness (Render) y /readiness
+      show-components: always # el gateway muestra db / rabbit en "Estado del sistema"
+  health:
+    mail:
+      enabled: false

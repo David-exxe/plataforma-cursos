@@ -1,0 +1,202 @@
+# =====================================================================
+# Render Blueprint: despliega CADA microservicio como un Web Service independiente.
+#   Render > New > Blueprint > elige este repositorio > completa las variables marcadas "sync: false".
+# Cada servicio tiene su propio contenedor, URL, logs, reinicios y despliegue:
+# si uno se cae, los demas siguen funcionando.
+#
+# Servicios externos (gratis): PostgreSQL en Neon, RabbitMQ en CloudAMQP, correo con Brevo.
+# Ver GUIA.md, seccion 12, para el paso a paso completo.
+# =====================================================================
+
+envVarGroups:
+  - name: cursos-comun
+    envVars:
+      - key: JWT_SECRET            # Render genera un valor aleatorio de 256 bits (Base64)
+        generateValue: true
+      - key: INTERNAL_API_KEY
+        generateValue: true
+      - key: RABBIT_URL            # CAMBIAR en Render > Env Groups: amqps://usuario:clave@host.cloudamqp.com/vhost
+        value: CAMBIAR
+      - key: FRONTEND_URL          # CAMBIAR: URL del static site, ej. https://cursos-web.onrender.com
+        value: CAMBIAR
+      - key: TZ
+        value: America/Lima
+      - key: OUTBOX_INTERVALO_MS   # en la nube basta con publicar eventos cada 5 s
+        value: "5000"
+
+services:
+  # ---------------- API Gateway (unica puerta de entrada) ----------------
+  - type: web
+    name: cursos-gateway
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./api-gateway/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health/liveness
+    buildFilter:
+      paths: ["api-gateway/**", "pom.xml"]
+    envVars:
+      - fromGroup: cursos-comun
+      - key: CORS_ORIGINS          # la misma URL del frontend (puedes agregar varias separadas por coma)
+        sync: false
+      - key: MATRICULA_URL         # https://cursos-matricula.onrender.com (ver la URL real en su panel)
+        sync: false
+      - key: PAGOS_URL
+        sync: false
+      - key: NOTIFICACIONES_URL
+        sync: false
+      - key: COMPROBANTES_URL
+        sync: false
+      - key: IP_CABECERAS
+        value: CF-Connecting-IP,True-Client-IP,X-Forwarded-For
+
+  # ---------------- matricula-service ----------------
+  - type: web
+    name: cursos-matricula
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./matricula-service/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health/liveness
+    buildFilter:
+      paths: ["matricula-service/**", "pom.xml"]
+    envVars:
+      - fromGroup: cursos-comun
+      - key: DB_URL                # jdbc:postgresql://ep-xxxx.us-east-2.aws.neon.tech/matricula_db?sslmode=require
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: ENCRYPTION_KEY        # 256 bits aleatorios: cifra los secretos 2FA
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_TELEFONO
+        sync: false
+      - key: PAGOS_URL             # URL publica de cursos-pagos
+        sync: false
+      - key: CORREO_PROVEEDOR
+        value: brevo
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM             # Nombre <correo verificado en Brevo>
+        sync: false
+
+  # ---------------- pagos-service ----------------
+  - type: web
+    name: cursos-pagos
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./pagos-service/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health/liveness
+    buildFilter:
+      paths: ["pagos-service/**", "pom.xml"]
+    envVars:
+      - fromGroup: cursos-comun
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: MP_MODO               # mock | real
+        value: mock
+      - key: MP_ACCESS_TOKEN
+        sync: false
+      - key: MP_WEBHOOK_SECRET
+        sync: false
+      - key: PUBLIC_URL            # URL publica del GATEWAY (Mercado Pago envia ahi los webhooks)
+        sync: false
+
+  # ---------------- notificaciones-service (WhatsApp + chatbot) ----------------
+  - type: web
+    name: cursos-notificaciones
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./notificaciones-service/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health/liveness
+    buildFilter:
+      paths: ["notificaciones-service/**", "pom.xml"]
+    envVars:
+      - fromGroup: cursos-comun
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: WA_MODO               # mock | real
+        value: mock
+      - key: WA_PHONE_NUMBER_ID
+        sync: false
+      - key: WA_ACCESS_TOKEN
+        sync: false
+      - key: WA_VERIFY_TOKEN
+        generateValue: true
+      - key: WA_APP_SECRET
+        sync: false
+      - key: ADMIN_TELEFONO
+        sync: false
+      - key: MATRICULA_URL
+        sync: false
+      - key: COMPROBANTES_URL
+        sync: false
+
+  # ---------------- comprobantes-service ----------------
+  - type: web
+    name: cursos-comprobantes
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./comprobantes-service/Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health/liveness
+    buildFilter:
+      paths: ["comprobantes-service/**", "pom.xml"]
+    envVars:
+      - fromGroup: cursos-comun
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: CORREO_PROVEEDOR
+        value: brevo
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: EMPRESA_NOMBRE
+        value: Academia de Cursos S.A.C.
+      - key: EMPRESA_RUC
+        value: "20000000001"
+
+  # ---------------- Frontend Angular (sitio estatico, no se duerme) ----------------
+  # La URL del gateway se escribe en environment.prod.ts ANTES de compilar (variable API_URL).
+  - type: web
+    name: cursos-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: sed -i "s#https://api.tu-dominio.com#${API_URL}#" src/environments/environment.prod.ts && npm install --no-audit --no-fund && npx ng build --configuration production
+    staticPublishPath: dist/academia-web/browser
+    buildFilter:
+      paths: ["frontend/**"]
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: API_URL               # URL publica del gateway, ej. https://cursos-gateway.onrender.com (sin / al final)
+        sync: false
+      - key: NODE_VERSION
+        value: "22.12.0"
