@@ -1,5 +1,6 @@
 package com.academia.pagos.config;
 
+import com.academia.pagos.comun.ErroresSeguridad;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,7 +34,7 @@ public class SeguridadConfig {
     private String claveInterna;
 
     @Bean
-    public SecurityFilterChain cadena(HttpSecurity http) throws Exception {
+    public SecurityFilterChain cadena(HttpSecurity http, ErroresSeguridad errores) throws Exception {
         http.csrf(c -> c.disable())
             .cors(c -> c.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -43,7 +44,12 @@ public class SeguridadConfig {
                 .requestMatchers("/internal/**").permitAll()   // protegidos con ClaveInternaFilter
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated())
-            .oauth2ResourceServer(o -> o.jwt(j -> j.decoder(jwtDecoder()).jwtAuthenticationConverter(convertidorRoles())))
+            // 401/403 con cuerpo JSON en espanol (ver comun/ErroresSeguridad)
+            .exceptionHandling(e -> e.authenticationEntryPoint(errores).accessDeniedHandler(errores))
+            .oauth2ResourceServer(o -> o
+                .authenticationEntryPoint(errores)
+                .accessDeniedHandler(errores)
+                .jwt(j -> j.decoder(jwtDecoder()).jwtAuthenticationConverter(convertidorRoles())))
             .addFilterBefore(new ClaveInternaFilter(claveInterna), BearerTokenAuthenticationFilter.class);
         return http.build();
     }

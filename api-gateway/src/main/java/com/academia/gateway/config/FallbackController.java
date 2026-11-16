@@ -29,9 +29,11 @@ public class FallbackController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("timestamp", Instant.now().toString());
         body.put("status", 503);
+        body.put("codigo", "SERVICIO_NO_DISPONIBLE");
         body.put("servicio", servicio);
         body.put("error", "El servicio de " + NOMBRES.getOrDefault(servicio, servicio)
                 + " no esta disponible en este momento. El resto de la plataforma sigue funcionando.");
+        body.put("ruta", exchange.getRequest().getPath().value());
         body.put("motivo", causa == null ? "circuito abierto" : causa.getClass().getSimpleName());
         return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body));
     }

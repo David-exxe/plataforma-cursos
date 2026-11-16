@@ -1,4 +1,4 @@
-import { ApplicationConfig, Injectable, inject, provideZoneChangeDetection } from '@angular/core';
+import { ApplicationConfig, ErrorHandler, Injectable, inject, provideZoneChangeDetection } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
@@ -6,6 +6,7 @@ import {
 } from '@angular/router';
 import { routes } from './app.routes';
 import { authInterceptor, errorInterceptor } from './core/http/interceptors';
+import { ManejadorErroresGlobal } from './core/http/manejador-errores-global';
 
 /** Título de pestaña: "Cursos · Academia". */
 @Injectable({ providedIn: 'root' })
@@ -29,5 +30,7 @@ export const appConfig: ApplicationConfig = {
     // Orden: primero adjunta el token, después normaliza los errores de la respuesta.
     provideHttpClient(withInterceptors([authInterceptor, errorInterceptor])),
     { provide: TitleStrategy, useClass: TituloAcademia },
+    // Errores que ninguna pantalla atrapó: aviso amigable en vez de fallar en silencio.
+    { provide: ErrorHandler, useClass: ManejadorErroresGlobal },
   ],
 };

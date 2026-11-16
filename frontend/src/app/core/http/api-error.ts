@@ -10,6 +10,10 @@ export class ApiError extends Error {
     public readonly tipo: TipoError = 'otro',
     public readonly detalle: Record<string, string> | null = null,
     public readonly hasta: string | null = null,
+    /** Código estable del backend (NO_ENCONTRADO, VALIDACION, SESION_INVALIDA, …). */
+    public readonly codigo: string | null = null,
+    /** Solo en errores 500: código para buscar el error en los logs del servidor. */
+    public readonly referencia: string | null = null,
   ) {
     super(mensaje);
     this.name = 'ApiError';
@@ -52,44 +56,102 @@ const TRADUCCIONES: Record<string, string> = {
   'Datos invalidos': 'Revisa los datos ingresados.',
   'El registro ya existe o viola una restriccion': 'Ese registro ya existe o no cumple las reglas del sistema.',
   'Error interno': 'Ocurrió un error en el servidor. Inténtalo de nuevo en unos minutos.',
+  // Mensajes genéricos del manejo global de errores (ManejadorErrores / ManejadorErroresGateway)
+  'La solicitud no es valida': 'La solicitud no es válida. Revisa los datos e inténtalo de nuevo.',
+  'Error en la solicitud': 'No se pudo procesar la solicitud.',
+  'JSON invalido o incompleto': 'Faltan datos o tienen un formato incorrecto.',
+  'Debes iniciar sesion para continuar': 'Debes iniciar sesión para continuar.',
+  'Tu sesion expiro o no es valida. Inicia sesion de nuevo': 'Tu sesión expiró. Ingresa de nuevo para continuar.',
+  'El recurso solicitado no existe': 'No encontramos lo que buscas.',
+  'La ruta solicitada no existe': 'No encontramos lo que buscas.',
+  'Metodo HTTP no permitido para esta ruta': 'Esta acción no está disponible.',
+  'Tipo de contenido no soportado. Envia JSON': 'No se pudo procesar la solicitud.',
+  'El contenido enviado es demasiado grande': 'El archivo o los datos enviados son demasiado grandes.',
+  'El registro fue modificado por otra operacion. Vuelve a intentarlo':
+    'Alguien modificó este registro al mismo tiempo. Recarga la página y vuelve a intentarlo.',
+  'Servicio no disponible temporalmente': 'El servicio no está disponible en este momento. Inténtalo de nuevo en unos minutos.',
+  'El servicio tardo demasiado en responder. Intenta de nuevo': 'El servidor tardó demasiado en responder. Inténtalo de nuevo.',
+  'Demasiadas peticiones. Intenta en unos minutos': 'Hiciste demasiadas solicitudes seguidas. Espera unos minutos.',
+  'Clave interna invalida': 'No tienes permiso para realizar esta acción.',
 };
 
+/** Mensajes del backend que incluyen datos variables (nombre del parámetro, servicio, etc.). */
+const PATRONES: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/^El valor '(.*)' no es valido para el parametro '(.+)'$/, (m) => `El valor "${m[1]}" no es válido para ${m[2]}.`],
+  [/^Falta el parametro obligatorio '(.+)'$/, (m) => `Falta un dato obligatorio: ${m[1]}.`],
+  [/^El metodo \w+ no esta permitido en esta ruta$/, () => 'Esta acción no está disponible.'],
+  [
+    /^El servicio de (.+) no esta disponible en este momento\. El resto de la plataforma sigue funcionando\.$/,
+    (m) => `El servicio de ${m[1]} no está disponible en este momento. El resto de la plataforma sigue funcionando; inténtalo de nuevo en unos minutos.`,
+  ],
+];
+
+/** Textos por defecto de Spring en inglés: nunca se muestran al usuario. */
+const TEXTOS_TECNICOS = /^(Bad Request|Unauthorized|Forbidden|Not Found|Method Not Allowed|Conflict|Internal Server Error|Service Unavailable|Gateway Timeout|Http failure)/i;
+
 export function traducir(mensaje: string | undefined | null, porDefecto: string): string {
-  if (!mensaje) return porDefecto;
-  return TRADUCCIONES[mensaje] ?? mensaje;
+  if (!mensaje || TEXTOS_TECNICOS.test(mensaje)) return porDefecto;
+  const directo = TRADUCCIONES[mensaje];
+  if (directo) return directo;
+  for (const [re, f] of PATRONES) {
+    const m = mensaje.match(re);
+    if (m) return f(m);
+  }
+  return mensaje;
 }
+
+const MSG_SIN_CONEXION =
+  'No pudimos conectar con el servidor. Si es el primer ingreso del día, puede tardar hasta un minuto en iniciar: espera unos segundos e inténtalo de nuevo.';
 
 /** Convierte (status, cuerpo JSON del backend) en un ApiError con mensaje para personas. */
 export function construirError(estado: number, c: ErrorApi | null): ApiError {
   const msg = c?.error;
+  const codigo = c?.codigo ?? null;
+  const detalle = c?.detalle ?? null;
+  const error = (texto: string, tipo: TipoError = 'otro', extra: { hasta?: string | null; referencia?: string | null } = {}) =>
+    new ApiError(texto, estado, tipo, detalle, extra.hasta ?? null, codigo, extra.referencia ?? null);
+
   switch (estado) {
     case 0:
-      return new ApiError('No pudimos conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.', 0, 'red');
+      return error(MSG_SIN_CONEXION, 'red');
     case 400:
-      return new ApiError(traducir(msg, 'La solicitud no es válida.'), 400, 'validacion', c?.detalle ?? null);
+    case 422:
+      return error(traducir(msg, 'La solicitud no es válida. Revisa los datos ingresados.'), 'validacion');
     case 401:
-      return new ApiError(traducir(msg, 'Tu sesión no es válida. Ingresa de nuevo.'), 401, 'sesion');
+      return error(traducir(msg, 'Tu sesión no es válida. Ingresa de nuevo.'), 'sesion');
     case 403:
-      if (msg === 'IP bloqueada') {
-        return new ApiError('Tu conexión está bloqueada temporalmente por seguridad.', 403, 'ip-bloqueada', null, c?.hasta ?? null);
+      if (msg === 'IP bloqueada' || codigo === 'IP_BLOQUEADA') {
+        return error('Tu conexión está bloqueada temporalmente por seguridad.', 'ip-bloqueada', { hasta: c?.hasta ?? null });
       }
-      return new ApiError(traducir(msg, 'No tienes permiso para realizar esta acción.'), 403, 'permiso');
+      return error(traducir(msg, 'No tienes permiso para realizar esta acción.'), 'permiso');
     case 404:
-      return new ApiError(traducir(msg, 'No encontramos lo que buscas.'), 404);
+      return error(traducir(msg, 'No encontramos lo que buscas.'));
+    case 405:
+      return error('Esta acción no está disponible.');
     case 409:
-      return new ApiError(traducir(msg, 'No se pudo completar la operación por un conflicto.'), 409);
+      return error(traducir(msg, 'No se pudo completar la operación por un conflicto con los datos actuales.'));
+    case 413:
+      return error('El archivo o los datos enviados son demasiado grandes.', 'validacion');
     case 429:
-      return new ApiError('Hiciste demasiadas solicitudes seguidas. Tu conexión quedó bloqueada unos minutos.', 429, 'ip-bloqueada');
+      return error('Hiciste demasiadas solicitudes seguidas. Tu conexión quedó bloqueada unos minutos.', 'ip-bloqueada', {
+        hasta: c?.hasta ?? null,
+      });
     case 502:
+      return error(MSG_SIN_CONEXION, 'servidor');
     case 503:
+      // El gateway indica qué servicio falló (circuit breaker); el resto de la plataforma sigue funcionando.
+      return error(traducir(msg, 'El servicio no está disponible en este momento. Inténtalo de nuevo en unos minutos.'), 'servidor');
     case 504:
-      return new ApiError('El servicio no está disponible en este momento. Inténtalo de nuevo en unos minutos.', estado, 'servidor');
-    default:
-      return new ApiError(
-        traducir(msg, estado >= 500 ? 'Ocurrió un error en el servidor. Inténtalo de nuevo.' : 'Ocurrió un error inesperado.'),
-        estado,
-        estado >= 500 ? 'servidor' : 'otro',
-        c?.detalle ?? null,
-      );
+      return error('El servidor tardó demasiado en responder. Inténtalo de nuevo en unos segundos.', 'servidor');
+    default: {
+      if (estado >= 500) {
+        const ref = c?.referencia ?? null;
+        const base = 'Ocurrió un error inesperado en el servidor. Inténtalo de nuevo en unos minutos.';
+        return error(ref ? `${base} Si el problema continúa, comunícate con soporte e indica el código ${ref}.` : base, 'servidor', {
+          referencia: ref,
+        });
+      }
+      return error(traducir(msg, 'Ocurrió un error inesperado.'));
+    }
   }
 }

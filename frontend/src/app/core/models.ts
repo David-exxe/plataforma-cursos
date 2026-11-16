@@ -189,11 +189,21 @@ export interface BloqueoIpRequest {
 }
 
 /* ---------- formato de error del backend (ManejadorErrores) ---------- */
+/** Formato único de error del backend (ErrorRespuesta en cada microservicio y en el gateway). */
 export interface ErrorApi {
   timestamp?: string;
   status?: number;
+  /** NO_ENCONTRADO, VALIDACION, SESION_INVALIDA, ACCESO_DENEGADO, IP_BLOQUEADA, SERVICIO_NO_DISPONIBLE, ERROR_INTERNO… */
+  codigo?: string;
+  /** Mensaje (sin tildes) que api-error.ts traduce para el usuario. */
   error?: string;
+  ruta?: string;
+  /** Errores por campo cuando codigo = VALIDACION. */
   detalle?: Record<string, string>;
+  /** Solo en errores 500: código para buscar el error en los logs. */
+  referencia?: string;
   /** Solo en el 403 "IP bloqueada" del gateway. */
   hasta?: string;
+  /** Solo en el 503 del circuit breaker: servicio caído. */
+  servicio?: string;
 }

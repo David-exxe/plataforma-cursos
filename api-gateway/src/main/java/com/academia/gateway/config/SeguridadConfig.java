@@ -1,5 +1,6 @@
 package com.academia.gateway.config;
 
+import com.academia.gateway.error.ErroresSeguridadGateway;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -53,7 +54,7 @@ public class SeguridadConfig {
     private String origenes;
 
     @Bean
-    public SecurityWebFilterChain cadenaSeguridad(ServerHttpSecurity http) {
+    public SecurityWebFilterChain cadenaSeguridad(ServerHttpSecurity http, ErroresSeguridadGateway errores) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
@@ -73,9 +74,14 @@ public class SeguridadConfig {
                         .pathMatchers("/webhooks/**").permitAll()
                         .pathMatchers("/api/admin/**", "/gateway/admin/**").hasRole("ADMIN")
                         .anyExchange().authenticated())
-                .oauth2ResourceServer(o -> o.jwt(j -> j
-                        .jwtDecoder(jwtDecoder())
-                        .jwtAuthenticationConverter(convertidorRoles())))
+                // 401/403 con cuerpo JSON en espanol (ver error/ErroresSeguridadGateway)
+                .exceptionHandling(e -> e.authenticationEntryPoint(errores).accessDeniedHandler(errores))
+                .oauth2ResourceServer(o -> o
+                        .authenticationEntryPoint(errores)
+                        .accessDeniedHandler(errores)
+                        .jwt(j -> j
+                                .jwtDecoder(jwtDecoder())
+                                .jwtAuthenticationConverter(convertidorRoles())))
                 .build();
     }
 
