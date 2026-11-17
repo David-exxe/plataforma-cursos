@@ -48,6 +48,8 @@ export class AdminShellComponent {
 
   protected readonly items: ItemMenu[] = [
     { ruta: '/admin/resumen', texto: 'Resumen', icono: 'grid' },
+    { ruta: '/admin/finanzas', texto: 'Finanzas', icono: 'trending-up' },
+    { ruta: '/admin/estudiantes', texto: 'Estudiantes', icono: 'users' },
     { ruta: '/admin/cursos', texto: 'Cursos', icono: 'book-open' },
     { ruta: '/admin/inscripciones', texto: 'Inscripciones', icono: 'clipboard' },
     { ruta: '/admin/pagos', texto: 'Pagos', icono: 'credit-card' },

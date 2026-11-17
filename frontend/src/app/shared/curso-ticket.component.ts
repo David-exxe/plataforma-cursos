@@ -2,6 +2,7 @@ import { Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Curso } from '../core/models';
 import { diasHasta, etiquetaInicio, partesTalon } from '../core/util/fechas';
+import { portadaUrl } from '../core/util/portadas';
 import { CuposComponent } from './cupos.component';
 import { IconComponent } from './icon.component';
 import { MoneyPipe } from './pipes';
@@ -22,6 +23,7 @@ import { MoneyPipe } from './pipes';
         <span class="stub-mes">{{ talon().mes }}</span>
       </div>
       <div class="ticket-body">
+        <img class="ticket-portada" [src]="portada()" alt="" loading="lazy" />
         <div class="ticket-chips">
           <span class="chip">
             <app-icon [name]="curso().modalidad === 'ONLINE' ? 'video' : 'map-pin'" [size]="14" />
@@ -47,4 +49,6 @@ export class CursoTicketComponent {
   protected readonly talon = computed(() => partesTalon(this.curso().fechaInicio));
   protected readonly etiqueta = computed(() => etiquetaInicio(this.curso().fechaInicio));
   protected readonly pronto = computed(() => diasHasta(this.curso().fechaInicio) <= 3);
+  /** Portada ilustrada generada a partir del nombre y código (no hay imágenes en la base de datos). */
+  protected readonly portada = computed(() => portadaUrl(this.curso()));
 }

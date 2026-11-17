@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { mensajeDe } from '../../core/http/api-error';
 import { Curso, Modalidad } from '../../core/models';
 import { CursosService } from '../../core/services/cursos.service';
+import { portadaUrl } from '../../core/util/portadas';
 import { normalizar } from '../../core/util/texto';
 import { CursoTicketComponent } from '../../shared/curso-ticket.component';
 import { IconComponent } from '../../shared/icon.component';
@@ -15,10 +16,32 @@ type Orden = 'fecha' | 'precio' | 'cupos';
   imports: [CursoTicketComponent, IconComponent, VacioComponent],
   template: `
     <section class="container page">
-      <header class="page-head">
-        <h1>Elige tu próximo curso</h1>
-        <p class="lead">Online y presenciales. Reserva tu cupo, paga con Mercado Pago y recibe tu comprobante por correo y WhatsApp.</p>
+      <header class="hero">
+        <div class="hero-texto">
+          <span class="hero-kicker">Inscripciones abiertas</span>
+          <h1>Elige tu próximo curso</h1>
+          <p class="lead">Online y presenciales. Reserva tu cupo, paga con Mercado Pago y recibe tu comprobante por correo y WhatsApp.</p>
+          <ol class="hero-pasos">
+            <li><app-icon name="ticket" [size]="16" /> Reserva tu cupo</li>
+            <li><app-icon name="credit-card" [size]="16" /> Paga en línea</li>
+            <li><app-icon name="file-text" [size]="16" /> Recibe tu boleta</li>
+          </ol>
+        </div>
+        @if (mosaico().length) {
+          <div class="hero-mosaico" aria-hidden="true">
+            @for (c of mosaico(); track c.id) { <img [src]="portada(c)" alt="" /> }
+          </div>
+        }
       </header>
+
+      @if (!cargando() && !error() && cursos().length) {
+        <dl class="hero-stats">
+          <div><dt>Cursos abiertos</dt><dd class="num">{{ stats().total }}</dd></div>
+          <div><dt>Online</dt><dd class="num">{{ stats().online }}</dd></div>
+          <div><dt>Presenciales</dt><dd class="num">{{ stats().presencial }}</dd></div>
+          <div><dt>Cupos libres</dt><dd class="num">{{ stats().cupos }}</dd></div>
+        </dl>
+      }
 
       <div class="toolbar">
         <div class="seg" role="group" aria-label="Modalidad">
@@ -84,6 +107,19 @@ export class CatalogoComponent {
     { valor: 'PRESENCIAL', texto: 'Presencial' },
   ];
 
+  /** Tres portadas para el mosaico del encabezado. */
+  protected readonly mosaico = computed(() => this.cursos().slice(0, 3));
+
+  protected readonly stats = computed(() => {
+    const l = this.cursos();
+    return {
+      total: l.length,
+      online: l.filter((c) => c.modalidad === 'ONLINE').length,
+      presencial: l.filter((c) => c.modalidad === 'PRESENCIAL').length,
+      cupos: l.reduce((s, c) => s + Math.max(0, c.cuposDisponibles), 0),
+    };
+  });
+
   protected readonly hayFiltros = computed(() => this.modalidad() !== '' || this.q().trim() !== '');
 
   protected readonly filtrados = computed(() => {
@@ -115,6 +151,10 @@ export class CatalogoComponent {
         this.cargando.set(false);
       },
     });
+  }
+
+  protected portada(c: Curso): string {
+    return portadaUrl(c);
   }
 
   protected limpiar(): void {

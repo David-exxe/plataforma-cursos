@@ -461,3 +461,91 @@ app-admin-shell { display: block; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
 }
+
+/* ==========================================================================
+   Portadas, encabezado del catálogo, Finanzas y Estudiantes (solo frontend)
+   ========================================================================== */
+
+/* portadas generadas (core/util/portadas.ts) */
+.ticket-portada { display: block; width: 100%; aspect-ratio: 16 / 7; object-fit: cover; border-radius: var(--r-md); background: var(--line-2); }
+.ticket:hover .ticket-portada { filter: saturate(1.15); }
+.ticket.agotado .ticket-portada { filter: grayscale(.7); }
+.detalle-portada { display: block; width: 100%; aspect-ratio: 16 / 6; object-fit: cover; border-radius: var(--r-lg); box-shadow: 0 18px 40px rgba(14, 42, 53, .18); }
+.mini-portada { flex: none; width: 64px; height: 40px; object-fit: cover; border-radius: 8px; background: var(--line-2); }
+.curso-celda { display: flex; align-items: center; gap: .8rem; }
+
+/* encabezado del catálogo */
+.hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 2rem; align-items: center; margin-bottom: 1.25rem; }
+.hero-texto { display: grid; gap: .75rem; }
+.hero-kicker { justify-self: start; padding: .3rem .7rem; border-radius: 999px; background: var(--sol-50); color: var(--warn); font: 700 .78rem var(--font-body); letter-spacing: .06em; text-transform: uppercase; }
+.hero-pasos { display: flex; flex-wrap: wrap; gap: .5rem; margin: .25rem 0 0; padding: 0; list-style: none; }
+.hero-pasos li { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .8rem; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--ink-2); font-size: .88rem; font-weight: 600; }
+.hero-mosaico { position: relative; height: 250px; }
+.hero-mosaico img { position: absolute; width: 64%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--r-lg); box-shadow: 0 16px 34px rgba(14, 42, 53, .22); }
+.hero-mosaico img:nth-child(1) { top: 0; left: 0; transform: rotate(-6deg); }
+.hero-mosaico img:nth-child(2) { top: 14%; right: 0; transform: rotate(4deg); }
+.hero-mosaico img:nth-child(3) { bottom: 0; left: 18%; transform: rotate(-2deg); }
+.hero-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; overflow: hidden; margin-bottom: .5rem; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.hero-stats > div { display: grid; gap: .1rem; padding: .9rem 1.1rem; background: var(--paper); }
+.hero-stats dt { color: var(--ink-3); font-size: .82rem; font-weight: 600; }
+.hero-stats dd { font: 800 1.6rem/1.1 var(--font-display); }
+
+/* Finanzas */
+.kpi-destacado { background: var(--ink); border-color: var(--ink); }
+.kpi-destacado dt, .kpi-destacado .kpi-sub { color: #b9cdd2; }
+.kpi-destacado dd { color: #fff; }
+.grafico { display: flex; align-items: stretch; gap: 4px; height: 240px; padding-top: 1.2rem; }
+.grafico-col { position: relative; display: flex; flex: 1 1 0; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 0; }
+.grafico-barra { width: 100%; max-width: 46px; min-height: 2px; border-radius: 6px 6px 2px 2px; background: var(--teal); transition: height .3s ease; }
+.grafico-barra.vacia { background: var(--line-2); }
+.grafico-col:hover .grafico-barra:not(.vacia) { background: var(--sol); }
+.grafico-valor { position: absolute; top: -1.1rem; max-width: 100%; overflow: hidden; color: var(--ink-3); font-size: .68rem; font-weight: 600; white-space: nowrap; opacity: 0; transition: opacity .15s; }
+.grafico-col:hover .grafico-valor { opacity: 1; }
+.grafico-eje { height: 1.2rem; margin-top: .35rem; color: var(--ink-3); font-size: .72rem; white-space: nowrap; }
+.fin-dos { margin: 1rem 0; align-items: start; }
+.ranking, .metodos, .estados-pago, .estudiantes, .estudiante-cursos { margin: 0; padding: 0; list-style: none; }
+.ranking { display: grid; gap: 1rem; }
+.ranking li { display: flex; align-items: center; gap: .85rem; }
+.ranking-info { display: grid; flex: 1; gap: .3rem; min-width: 0; }
+.ranking-cab { display: flex; justify-content: space-between; gap: .75rem; }
+.ranking-cab strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.metodos { display: grid; gap: .8rem; }
+.barra-sol span { background: var(--sol-600); }
+.fin-sub { margin: 1.4rem 0 .7rem; font-size: 1rem; }
+.estados-pago { display: grid; gap: .5rem; }
+.estados-pago li { display: grid; grid-template-columns: 1fr auto 7rem; align-items: center; gap: .75rem; }
+.estados-pago li > :first-child { justify-self: start; }
+.estados-pago .num { text-align: right; }
+.monto-neg { color: var(--bad); text-decoration: line-through; }
+
+/* Estudiantes */
+.estudiantes { display: grid; gap: .6rem; }
+.estudiante { overflow: hidden; }
+.estudiante-cab { display: grid; grid-template-columns: auto minmax(0, 1fr) 5.5rem 8rem 13rem auto; align-items: center; gap: 1rem; width: 100%; padding: .9rem 1.2rem; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.estudiante-cab:hover { background: #f8fbfa; }
+.estudiante-id { display: grid; min-width: 0; }
+.estudiante-id strong, .estudiante-id .cell-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.estudiante-dato { display: grid; }
+.avatar-ini { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--teal-50); color: var(--teal-700); font: 700 .9rem var(--font-display); }
+.estudiante-flecha { color: var(--ink-3); transition: transform .15s; }
+.estudiante.abierto .estudiante-flecha { transform: rotate(90deg); }
+.estudiante.abierto { border-color: var(--teal); }
+.estudiante-cursos { display: grid; gap: .1rem; padding: .25rem 1.2rem 1rem; border-top: 1px dashed var(--line); }
+.estudiante-cursos li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 7rem; align-items: center; gap: .9rem; padding: .55rem 0; }
+.estudiante-cursos .num { text-align: right; }
+
+/* la tarjeta destacada lleva la portada a la derecha en vez de arriba */
+@media (min-width: 820px) {
+  .ticket.destacado .ticket-body { display: grid; grid-template-columns: minmax(0, 1fr) 42%; column-gap: 1.6rem; align-content: start; }
+  .ticket.destacado .ticket-body > :not(.ticket-portada) { grid-column: 1; }
+  .ticket.destacado .ticket-portada { grid-column: 2; grid-row: 1 / span 5; align-self: stretch; height: 100%; min-height: 210px; aspect-ratio: auto; }
+}
+@media (max-width: 860px) {
+  .hero { grid-template-columns: 1fr; }
+  .hero-mosaico { display: none; }
+  .hero-stats { grid-template-columns: repeat(2, 1fr); }
+  .estudiante-cab { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .oculto-movil { display: none; }
+  .estudiante-cursos li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .estudiante-cursos li .num { display: none; }
+}

@@ -37,6 +37,16 @@ export const routes: Routes = [
         loadComponent: () => import('./features/admin/resumen.component').then((m) => m.ResumenComponent),
       },
       {
+        path: 'finanzas',
+        title: 'Finanzas · Admin',
+        loadComponent: () => import('./features/admin/finanzas.component').then((m) => m.FinanzasComponent),
+      },
+      {
+        path: 'estudiantes',
+        title: 'Estudiantes · Admin',
+        loadComponent: () => import('./features/admin/estudiantes.component').then((m) => m.EstudiantesComponent),
+      },
+      {
         path: 'cursos',
         title: 'Cursos · Admin',
         loadComponent: () => import('./features/admin/admin-cursos.component').then((m) => m.AdminCursosComponent),

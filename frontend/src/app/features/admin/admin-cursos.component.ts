@@ -3,6 +3,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { catchError, forkJoin, of } from 'rxjs';
 import { mensajeDe } from '../../core/http/api-error';
 import { CursoAdmin, CursoRequest, Inscripcion, Modalidad, Moneda } from '../../core/models';
+import { portadaUrl } from '../../core/util/portadas';
 import { CursosService } from '../../core/services/cursos.service';
 import { InscripcionesService } from '../../core/services/inscripciones.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -62,7 +63,12 @@ const TAM = 10;
             @for (c of visibles(); track c.id) {
               <tr>
                 <td class="mono">{{ c.codigo }}</td>
-                <td><strong>{{ c.nombre }}</strong><span class="cell-sub">{{ c.modalidad === 'ONLINE' ? 'Online' : 'Presencial' }} · {{ c.horario || 'Sin horario' }}</span></td>
+                <td>
+                  <div class="curso-celda">
+                    <img class="mini-portada" [src]="portada(c)" alt="" loading="lazy" />
+                    <div><strong>{{ c.nombre }}</strong><span class="cell-sub">{{ c.modalidad === 'ONLINE' ? 'Online' : 'Presencial' }} · {{ c.horario || 'Sin horario' }}</span></div>
+                  </div>
+                </td>
                 <td>{{ c.fechaInicio | fecha: 'corta' }}</td>
                 <td class="num">{{ c.precio | money: c.moneda }}</td>
                 <td>
@@ -327,5 +333,9 @@ export class AdminCursosComponent {
         if (!aplicarErroresServidor(this.form, e)) this.errorForm.set(mensajeDe(e));
       },
     });
+  }
+
+  protected portada(c: CursoAdmin): string {
+    return portadaUrl(c);
   }
 }

@@ -9,6 +9,7 @@ import { CursosService } from '../../core/services/cursos.service';
 import { InscripcionesService } from '../../core/services/inscripciones.service';
 import { ToastService } from '../../core/services/toast.service';
 import { diasHasta } from '../../core/util/fechas';
+import { portadaUrl } from '../../core/util/portadas';
 import { CuposComponent } from '../../shared/cupos.component';
 import { IconComponent } from '../../shared/icon.component';
 import { FechaPipe, MoneyPipe } from '../../shared/pipes';
@@ -33,6 +34,7 @@ import { VacioComponent } from '../../shared/vacio.component';
       } @else if (curso(); as c) {
         <div class="detalle">
           <article class="detalle-main">
+            <img class="detalle-portada" [src]="portada(c)" [alt]="'Portada del curso ' + c.nombre" />
             <div class="ticket-chips">
               <span class="chip"><app-icon [name]="c.modalidad === 'ONLINE' ? 'video' : 'map-pin'" [size]="14" /> {{ c.modalidad === 'ONLINE' ? 'Online' : 'Presencial' }}</span>
               <span class="chip chip-neutro">{{ c.codigo }}</span>
@@ -173,5 +175,9 @@ export class CursoDetalleComponent {
         this.buscarInscripcion(c.id);
       },
     });
+  }
+
+  protected portada(c: Curso): string {
+    return portadaUrl(c);
   }
 }
